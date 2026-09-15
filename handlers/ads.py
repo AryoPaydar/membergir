@@ -5,7 +5,7 @@ from database import db
 from bot_manager import (
     get_user, update_user, set_user_state, get_user_state,
     add_coins, remove_coins, check_membership, check_bot_admin,
-    is_admin
+    is_admin, check_referral_milestone
 )
 from utils.keyboards import inline, back_button, main_menu
 from utils.helpers import (
@@ -20,7 +20,6 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ ثبت سفارش موقتاً غیرفعال است.")
         return
     
-    # گرفتن آیتم‌های فعال از دیتابیس
     with db.conn() as c:
         items = c.execute("SELECT * FROM settings WHERE key LIKE 'order_item_%'").fetchall()
     
@@ -31,7 +30,7 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows = []
     for it in items:
         try:
-            parts = it["value"].split("|")  # نام|سکه|عضو
+            parts = it["value"].split("|")
             name, coin, member = parts[0], int(parts[1]), int(parts[2])
             rows.append([(f"{name} | {coin} سکه", f"order_pick:{it['key']}")])
         except Exception:
@@ -89,7 +88,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("❌ آیدی کانال نامعتبر است.")
         return True
     
-    # چک ادمین بودن ربات
     if not await check_bot_admin(context, channel):
         await update.message.reply_text(
             f"❌ ربات در کانال @{channel} ادمین نیست.\n"
@@ -97,7 +95,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
     
-    # دریافت اطلاعات کانال
     try:
         chat = await context.bot.get_chat(f"@{channel}")
         if chat.type not in ("channel", "supergroup"):
@@ -107,7 +104,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text(f"❌ خطا در دریافت اطلاعات کانال: {e}")
         return True
     
-    # ساخت پست تبلیغاتی
     name = data.get("name", "")
     coin = data.get("coin", 0)
     member = data.get("member", 0)
@@ -117,7 +113,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         set_user_state(user_id, "none")
         return True
     
-    # ارسال پست به کانال تبلیغات
     bot_username = (await context.bot.get_me()).username
     post_text = (
         f"‼️ نام کانال: {chat.title}\n\n"
@@ -127,7 +122,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     
     button = inline([
         [(f"👤 سفارش {member} ممبر", "noop")],
-        [("💰 دریافت سکه", "claim_coin:0")],  # order_id بعداً ست میشه
+        [("💰 دریافت سکه", "claim_coin:0")],
         [("📢 عضویت در کانال", f"https://t.me/{channel}")],
         [("🚫 گزارش", "report:0")],
     ])
@@ -142,7 +137,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text(f"❌ خطا در ارسال پست: {e}")
         return True
     
-    # ذخیره سفارش در دیتابیس
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
@@ -150,7 +144,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         """, (user_id, channel, chat.id, post.message_id, member, coin, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
     
-    # آپدیت دکمه دریافت سکه با order_id واقعی
     try:
         await context.bot.edit_message_reply_markup(
             chat_id=f"@{Config.ADS_CHANNEL}",
@@ -165,7 +158,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     except Exception:
         pass
     
-    # کسر سکه و آپدیت کاربر
     remove_coins(user_id, coin, "order_create", f"سفارش #{order_id}")
     update_user(user_id, orders_count=(get_user(user_id)["orders_count"] + 1))
     
@@ -193,7 +185,6 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         order = dict(order)
         
-        # چک تکراری نبودن
         dup = c.execute(
             "SELECT 1 FROM order_members WHERE order_id = ? AND user_id = ?",
             (order_id, user_id)
@@ -214,12 +205,10 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("❌ ظرفیت این سفارش پر شده.", show_alert=True)
         return
     
-    # چک عضویت در کانال سفارش
     if not await check_membership(context, order["channel"], user_id):
         await q.answer("❌ ابتدا در کانال عضو شوید.", show_alert=True)
         return
     
-    # چک عضویت در کانال تبلیغات
     if not await check_membership(context, Config.ADS_CHANNEL, user_id):
         await q.answer("❌ ابتدا در کانال تبلیغات عضو شوید.", show_alert=True)
         return
@@ -227,9 +216,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(user_id)
     coin = get_panel_join_coin(user["panel"])
     
-    # ثبت عضو و افزایش شمارنده — به صورت اتمیک
     with db.conn() as c:
-        # چک دوباره (race condition)
         dup = c.execute(
             "SELECT 1 FROM order_members WHERE order_id = ? AND user_id = ?",
             (order_id, user_id)
@@ -248,16 +235,16 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             WHERE id = ? AND member_received < member_target
         """, (order_id,))
         
-        # افزایش شمارنده عضویت کاربر
         c.execute("UPDATE users SET ads_joined = ads_joined + 1 WHERE user_id = ?", (user_id,))
     
-    # افزودن سکه
+    # 👇 این خط جدید: بررسی پاداش زیرمجموعه
+    await check_referral_milestone(context, user_id)
+    
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
     
     new_coins = get_user(user_id)["coins"]
     await q.answer(f"✅ {coin} سکه دریافت کردید!\n💰 موجودی: {new_coins:,}", show_alert=False)
     
-    # بررسی اتمام سفارش
     with db.conn() as c:
         o = c.execute("SELECT member_received, member_target, post_id, admin_id, channel FROM orders WHERE id=?", (order_id,)).fetchone()
         if o and o["member_received"] >= o["member_target"]:
@@ -273,32 +260,9 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception:
                 pass
-    
-    # پورسانت زیرمجموعه
-    await handle_referral_commission(context, user_id, order_id)
 
 async def get_panel_join_coin(panel):
     return Config.PANELS.get(panel, Config.PANELS["عادی"])["join_coin"]
-
-async def handle_referral_commission(context, user_id, order_id):
-    """پورسانت به معرف در صورت رسیدن به آستانه"""
-    user = get_user(user_id)
-    if not user or not user["referrer_id"]:
-        return
-    from bot_manager import get_setting, add_coins
-    threshold = int(get_setting("referral_join_threshold", str(Config.REFERRAL_JOIN_THRESHOLD)))
-    coin = int(get_setting("referral_join_coin", str(Config.REFERRAL_JOIN_COIN)))
-    
-    if user["ads_joined"] == threshold:
-        add_coins(user["referrer_id"], coin, "referral_commission", f"پورسانت از {user_id}")
-        try:
-            await context.bot.send_message(
-                user["referrer_id"],
-                f"🎉 زیرمجموعه شما ({user_id}) به {threshold} عضویت رسید!\n"
-                f"💰 {coin} سکه پورسانت دریافت کردید."
-            )
-        except Exception:
-            pass
 
 # ==================== گزارش ====================
 async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
