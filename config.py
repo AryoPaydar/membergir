@@ -28,7 +28,7 @@ class Config:
     
     # === پنل‌ها ===
     PANELS = {
-        "عادی":     {"daily": 3, "join_coin": 1.5, "invite_coin": 05,  "upgrade_cost": 0},
+        "عادی":     {"daily": 3, "join_coin": 1.5, "invite_coin": 10,  "upgrade_cost": 0},
         "حرفه ای":  {"daily": 4, "join_coin": 2, "invite_coin": 15, "upgrade_cost": 100},
         "ویژه":     {"daily": 5, "join_coin": 2.5, "invite_coin": 20, "upgrade_cost": 200},
     }
