@@ -54,7 +54,7 @@ async def on_message(update: Update, context):
     if not get_user(user_tg.id):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
     
-    # ۱. State کاربر
+    # ۱. State کاربر — ads اول از همه چون state های سفارش باید سریع هندل بشن
     for module in (ads, transfer, referral, gift, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             if await module.handle_state(update, context):
@@ -88,6 +88,7 @@ async def on_message(update: Update, context):
 
 async def on_callback(update: Update, context):
     q = update.callback_query
+    
     if is_banned(q.from_user.id):
         await q.answer()
         return
@@ -96,10 +97,21 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
     
-    # همه ماژول‌ها
+    # 👇 ترتیب مهم: ads اول، چون callback های claim_coin, order_pick, order_confirm و report رو هندل می‌کنه
     modules = [
-        user, ads, admin, transfer, referral, gift, shop,
-        panel, orders_history, top, admin_shop, admin_texts, history
+        ads,           # 👈 اول از همه — مهم برای toast سکه دریافتی
+        user,
+        admin,
+        transfer,
+        referral,
+        gift,
+        shop,
+        panel,
+        orders_history,
+        top,
+        admin_shop,
+        admin_texts,
+        history,
     ]
     for module in modules:
         if hasattr(module, "handle_callback"):
@@ -109,7 +121,11 @@ async def on_callback(update: Update, context):
             except Exception as e:
                 logger.exception(f"Callback error in {module.__name__}: {e}")
     
-    await q.answer()
+    # اگه هیچ ماژولی هندل نکرد، callback رو ببند
+    try:
+        await q.answer()
+    except Exception:
+        pass
 
 async def on_error(update: object, context):
     logger.error(f"Exception: {context.error}", exc_info=context.error)
