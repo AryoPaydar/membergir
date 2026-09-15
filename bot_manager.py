@@ -53,7 +53,6 @@ def add_coins(user_id: int, amount: int, tx_type: str = "add", desc: str = ""):
     from utils.helpers import jalali_now
     today, _ = jalali_now()
     with db.conn() as c:
-        # اگه روز عوض شده، today_earned رو ریست کن
         row = c.execute("SELECT today_date FROM users WHERE user_id = ?", (user_id,)).fetchone()
         if row and row["today_date"] != today:
             c.execute(
@@ -216,3 +215,73 @@ def is_bot_on() -> bool:
 
 def set_bot_power(on: bool):
     set_setting("bot_power", "on" if on else "off")
+
+# ==================== بررسی پاداش زیرمجموعه ====================
+async def check_referral_milestone(context, user_id: int):
+    """
+    وقتی کاربر به آستانه عضویت (ads_joined) رسید،
+    به معرفش الماس هدیه بده — فقط یک بار
+    """
+    user = get_user(user_id)
+    if not user:
+        return
+    
+    referrer_id = user.get("referrer_id")
+    if not referrer_id:
+        return
+    
+    # اگه قبلاً پاداش داده شده، برو
+    if user.get("referral_rewarded"):
+        return
+    
+    # چک کن به آستانه رسیده یا نه
+    threshold = int(get_setting("referral_join_threshold", str(Config.REFERRAL_JOIN_THRESHOLD)))
+    if user.get("ads_joined", 0) < threshold:
+        return
+    
+    referrer = get_user(referrer_id)
+    if not referrer:
+        return
+    
+    # الماس بر اساس پنل معرف
+    panel_cfg = get_panel_config(referrer.get("panel", "عادی"))
+    invite_coin = panel_cfg["invite_coin"]
+    commission_percent = {
+        "عادی": 5,
+        "حرفه ای": 10,
+        "ویژه": 15,
+    }.get(referrer.get("panel", "عادی"), 5)
+    
+    # واریز الماس به معرف
+    add_coins(
+        referrer_id, invite_coin, "referral_commission",
+        f"پاداش زیرمجموعه {user_id} بعد از {threshold} عضویت"
+    )
+    
+    # علامت‌گذاری که پاداش داده شده
+    update_user(user_id, referral_rewarded=1)
+    
+    # افزایش شمارنده امروز معرف
+    with db.conn() as c:
+        c.execute(
+            "UPDATE users SET referral_today = referral_today + 1 WHERE user_id = ?",
+            (referrer_id,)
+        )
+    
+    # ارسال پیام تبریک به معرف
+    try:
+        await context.bot.send_message(
+            referrer_id,
+            f"🎉تبریک!!\n"
+            f"\n"
+            f"🎁 دریافت {invite_coin} الماس هدیه \n"
+            f"\n"
+            f"👈یکی از زیرمجموعه های شما برای اولین بار {threshold} دریافت الماس (عضویت در کانال) انجام داد\n"
+            f"\n"
+            f"✅ {invite_coin} الماس بصورت هدیه به حساب شما اضافه شد\n"
+            f"\n"
+            f"👌همچنین محاسبه {commission_percent} درصد پورسانت حاصل از فعالیت کاربر برای شما فعال شد",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
