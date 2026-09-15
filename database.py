@@ -51,7 +51,8 @@ class Database:
                     total_spent     INTEGER DEFAULT 0,
                     today_earned    INTEGER DEFAULT 0,
                     today_date      TEXT,
-                    referral_today  INTEGER DEFAULT 0
+                    referral_today  INTEGER DEFAULT 0,
+                    referral_rewarded INTEGER DEFAULT 0
                 )
             """)
             
@@ -63,6 +64,7 @@ class Database:
                 "today_earned": "INTEGER DEFAULT 0",
                 "today_date": "TEXT",
                 "referral_today": "INTEGER DEFAULT 0",
+                "referral_rewarded": "INTEGER DEFAULT 0",
             }
             for col, col_type in new_columns.items():
                 if col not in existing_columns:
