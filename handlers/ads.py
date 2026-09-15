@@ -92,11 +92,6 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== چک معتبر بودن آیدی (فقط با @) ====================
 def is_valid_at_channel(text: str) -> bool:
-    """
-    فقط آیدی‌هایی رو قبول می‌کنه که:
-    - با @ شروع می‌شن
-    - بعدش ۵ تا ۳۲ کاراکتر انگلیسی/عدد/آندرلاین
-    """
     if not text or not text.startswith("@"):
         return False
     import re
@@ -117,7 +112,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("🏠", reply_markup=main_menu())
         return True
     
-    # === چک معتبر بودن آیدی ===
     if not is_valid_at_channel(text):
         await update.message.reply_text(
             "❌آیدی ارسالی صحیح نمی باشد\n"
@@ -126,10 +120,8 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
     
-    # حالا channel بدون @
-    channel = text[1:]  # حذف @
+    channel = text[1:]
     
-    # چک ادمین بودن ربات
     if not await check_bot_admin(context, channel):
         await update.message.reply_text(
             f"❌ربات ادمین کانال @{channel} نیست\n"
@@ -141,7 +133,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
     
-    # دریافت اطلاعات کانال
     try:
         chat = await context.bot.get_chat(f"@{channel}")
         if chat.type not in ("channel", "supergroup"):
@@ -266,7 +257,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (user_id, channel, channel_id, post.message_id, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
     
-    # آپدیت دکمه‌های پست با order_id واقعی
+    # آپدیت دکمه‌های پست
     try:
         await context.bot.edit_message_reply_markup(
             chat_id=f"@{Config.ADS_CHANNEL}",
@@ -290,10 +281,11 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # لینک پست در کانال
     post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post.message_id}"
     
+    # 👇 نمایش کد پیگیری با post.message_id
     success_text = (
         f"✅سفارش شما با موفقیت ثبت شد\n"
         f"\n"
-        f"🔍 کد پیگیری سفارش شما {order_id} می باشد\n"
+        f"🔍 کد پیگیری سفارش شما {post.message_id} می باشد\n"
         f" \n"
         f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
     )
@@ -390,15 +382,12 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         c.execute("UPDATE users SET ads_joined = ads_joined + 1 WHERE user_id = ?", (user_id,))
     
-    # بررسی پاداش زیرمجموعه
     await check_referral_milestone(context, user_id)
-    
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
     
     new_coins = get_user(user_id)["coins"]
     
-    # 👇 نوتیفیکیشن بالای صفحه (show_alert=False یعنی پاپ‌آپ، true یعنی هشدار)
-    # برای نمایش بالای صفحه (toast)، همیشه show_alert=False
+    # toast سکه دریافتی
     await q.answer(
         f"💰 سکه دریافتی : {coin} سکه | موجودی کل : {new_coins:,} سکه",
         show_alert=False
