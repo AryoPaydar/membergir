@@ -4,7 +4,8 @@ from database import db
 from config import Config
 from bot_manager import (
     get_user, create_user, update_user, set_user_state, get_user_state,
-    add_coins, get_daily_gift, is_admin, is_banned, check_membership
+    add_coins, get_daily_gift, is_admin, is_banned, check_membership,
+    get_panel_config
 )
 from utils.keyboards import main_menu, back_button, inline
 from utils.texts import start_text, account_text
@@ -91,31 +92,38 @@ async def check_force_join(context, user_id):
     return False
 
 async def handle_referral_join(context, referrer_id, new_user_id):
-    """پاداش زیرمجموعه جدید"""
+    """اطلاعیه زیرمجموعه جدید — فقط اطلاع‌رسانی، بدون پاداش فوری"""
     referrer = get_user(referrer_id)
     if not referrer:
         return
-    from bot_manager import get_invite_coin, add_coins, get_setting
     
-    coin = get_invite_coin(referrer)
-    add_coins(referrer_id, coin, "referral", f"زیرمجموعه جدید: {new_user_id}")
+    # الماس هدیه و درصد پورسانت بر اساس پنل معرف
+    panel_cfg = get_panel_config(referrer.get("panel", "عادی"))
+    invite_coin = panel_cfg["invite_coin"]
+    commission_percent = {
+        "عادی": 5,
+        "حرفه ای": 10,
+        "ویژه": 15,
+    }.get(referrer.get("panel", "عادی"), 5)
     
-    # افزایش شمارنده امروز
-    with db.conn() as c:
-        c.execute(
-            "UPDATE users SET referral_today = referral_today + 1 WHERE user_id = ?",
-            (referrer_id,)
-        )
-    
+    # ارسال اطلاعیه به معرف
     try:
         await context.bot.send_message(
             referrer_id,
-            f"🎉 یک کاربر جدید با لینک شما عضو ربات شد!\n"
-            f"💰 {coin} سکه به حساب شما اضافه شد."
+            f"🎉اطلاعیه زیرمجموعه جدید\n"
+            f"\n"
+            f"✅یک کاربر با لینک اختصاصی شما عضو ربات شد\n"
+            f"\n"
+            f"👈 پس از دریافت 3 الماس(عضویت در کانال) توسط زیرمجموعه ی شما ، {invite_coin} الماس به حساب شما واریز می شود\n"
+            f"\n"
+            f"👌همچنین {commission_percent} درصد از پورسانت حاصل از فعالیت کاربر به طور دائمی به شما تعلق گرفت",
+            parse_mode="HTML"
         )
     except Exception:
         pass
     
+    # گزارش به ادمین
+    from bot_manager import get_setting
     if get_setting("referral_report", "on") == "on":
         try:
             await context.bot.send_message(
@@ -222,7 +230,6 @@ async def go_to_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
-    # مستقیم پنل فروشگاه رو باز کن
     from handlers import shop
     await shop.shop_menu_from_callback(update, context)
     
