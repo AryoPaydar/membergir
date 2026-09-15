@@ -321,7 +321,6 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
     
-    # === چک اول: سفارش وجود داره؟ ===
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         if not order:
@@ -349,17 +348,14 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("❌ ظرفیت این سفارش پر شده.", show_alert=True)
         return
     
-    # === چک عضویت در کانال سفارش ===
     if not await check_membership(context, order["channel"], user_id):
         await q.answer("❌ ابتدا در کانال عضو شوید.", show_alert=True)
         return
     
-    # === چک عضویت در کانال تبلیغات ===
     if not await check_membership(context, Config.ADS_CHANNEL, user_id):
         await q.answer("❌ ابتدا در کانال تبلیغات عضو شوید.", show_alert=True)
         return
     
-    # === اطمینان از وجود کاربر ===
     user = get_user(user_id)
     if not user:
         from bot_manager import create_user
@@ -369,10 +365,8 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("❌ خطا در ایجاد کاربر. لطفاً /start بزنید.", show_alert=True)
             return
     
-    # 👇 حالا تابع sync رو بدون await صدا بزن
     coin = get_panel_join_coin(user["panel"])
     
-    # === ثبت + سکه در یک تراکنش ===
     success = False
     with db.conn() as c:
         dup = c.execute(
@@ -401,25 +395,21 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("❌ ثبت نشد. دوباره تلاش کنید.", show_alert=True)
         return
     
-    # === پاداش زیرمجموعه ===
     try:
         await check_referral_milestone(context, user_id)
     except Exception:
         pass
     
-    # === افزودن الماس ===
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
     
     new_user = get_user(user_id)
     new_coins = new_user["coins"] if new_user else 0
     
-    # === toast ===
     await q.answer(
         f"💰 سکه دریافتی : {coin} سکه | موجودی کل : {new_coins:,} سکه",
         show_alert=False
     )
     
-    # === بررسی اتمام سفارش ===
     with db.conn() as c:
         o = c.execute(
             "SELECT member_received, member_target, post_id, admin_id, channel FROM orders WHERE id=?",
@@ -445,25 +435,107 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
+    
     with db.conn() as c:
         if c.execute("SELECT 1 FROM order_reports WHERE order_id=? AND reporter_id=?", (order_id, user_id)).fetchone():
             await q.answer("❌ قبلاً گزارش داده‌اید.", show_alert=True)
             return
-        c.execute("INSERT INTO order_reports (order_id, reporter_id) VALUES (?, ?)", (order_id, user_id))
-        o = c.execute("SELECT admin_id, channel FROM orders WHERE id=?", (order_id,)).fetchone()
+        
+        o = c.execute(
+            "SELECT id, admin_id, channel, post_id FROM orders WHERE id=?",
+            (order_id,)
+        ).fetchone()
+        
+        if not o:
+            await q.answer("❌ سفارش یافت نشد.", show_alert=True)
+            return
+        
+        c.execute(
+            "INSERT INTO order_reports (order_id, reporter_id) VALUES (?, ?)",
+            (order_id, user_id)
+        )
     
     await q.answer("✅ گزارش شما ثبت شد.", show_alert=True)
-    if o:
-        try:
-            await context.bot.send_message(
-                Config.ADMIN_ID,
-                f"🚫 گزارش جدید\nسفارش #{order_id}\n"
-                f"سفارش‌دهنده: {o['admin_id']}\n"
-                f"گزارش‌دهنده: {user_id}\n"
-                f"کانال: @{o['channel']}"
-            )
-        except Exception:
-            pass
+    
+    order_admin = o["admin_id"]
+    channel = o["channel"]
+    post_id = o["post_id"]
+    
+    text = (
+        f"🚫 گزارش جدید\n"
+        f"سفارش #{post_id}\n"
+        f"گزارش‌دهنده: <code>{user_id}</code>\n"
+        f"سفارش‌دهنده: <code>{order_admin}</code>\n"
+        f"کانال: @{channel}"
+    )
+    
+    post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post_id}"
+    
+    keyboard = inline([
+        [("👁 مشاهده پست", post_link)],
+        [("👤 پروفایل گزارش‌دهنده", f"show_profile:{user_id}"),
+         ("👤 پروفایل سفارش‌دهنده", f"show_profile:{order_admin}")],
+        [("🗑 حذف گزارش", f"report_delete:{order_id}")],
+    ])
+    
+    try:
+        await context.bot.send_message(
+            Config.ADMIN_ID,
+            text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        print(f"Report send error: {e}")
+
+
+# ==================== نمایش پروفایل کاربر (برای ادمین) ====================
+async def show_user_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    admin_id = q.from_user.id
+    
+    if not is_admin(admin_id):
+        await q.answer("❌ دسترسی ندارید.", show_alert=True)
+        return
+    
+    await q.answer()
+    
+    target_id = int(q.data.split(":")[1])
+    
+    user = get_user(target_id)
+    if not user:
+        await q.message.reply_text("❌ کاربر در دیتابیس یافت نشد.")
+        return
+    
+    from utils.texts import account_text
+    text = account_text(user)
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML"
+    )
+
+
+# ==================== حذف گزارش ====================
+async def report_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    user_id = q.from_user.id
+    
+    if user_id != Config.ADMIN_ID:
+        await q.answer("❌ فقط ادمین اصلی می‌تواند حذف کند.", show_alert=True)
+        return
+    
+    order_id = int(q.data.split(":")[1])
+    
+    with db.conn() as c:
+        c.execute("DELETE FROM order_reports WHERE order_id = ?", (order_id,))
+    
+    await q.answer("✅ گزارش حذف شد.", show_alert=True)
+    
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
 
 
 # ==================== روتر callback ====================
@@ -471,17 +543,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     q = update.callback_query
     data = q.data
     
-    # فقط callback های مربوط به ads
     if not (
         data.startswith("order_pick:") or
         data.startswith("order_confirm_yes:") or
         data == "order_confirm_no" or
         data.startswith("claim_coin:") or
-        data.startswith("report:")
+        data.startswith("report:") or
+        data.startswith("report_delete:") or
+        data.startswith("show_profile:")
     ):
         return False
     
-    # اطمینان از وجود کاربر توی دیتابیس
     user = get_user(q.from_user.id)
     if not user:
         from bot_manager import create_user
@@ -498,6 +570,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return True
     if data.startswith("claim_coin:"):
         await claim_coin(update, context)
+        return True
+    if data.startswith("report_delete:"):
+        await report_delete(update, context)
+        return True
+    if data.startswith("show_profile:"):
+        await show_user_profile(update, context)
         return True
     if data.startswith("report:"):
         await report_order(update, context)
