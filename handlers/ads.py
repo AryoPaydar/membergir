@@ -12,63 +12,87 @@ from utils.helpers import (
     is_positive_int, is_valid_username, normalize_channel, now_ts, format_number
 )
 
+
+# ==================== آیتم‌های ثابت ثبت سفارش ====================
+ORDER_ITEMS = [
+    {"key": "item_20",   "members": 20,   "coins": 40},
+    {"key": "item_10",   "members": 10,   "coins": 20},
+    {"key": "item_100",  "members": 100,  "coins": 200},
+    {"key": "item_50",   "members": 50,   "coins": 100},
+    {"key": "item_400",  "members": 400,  "coins": 800},
+    {"key": "item_200",  "members": 200,  "coins": 400},
+]
+
+
 # ==================== منوی سفارش ====================
 async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     from bot_manager import get_setting
+    
     if get_setting("order_locked", "off") == "on":
         await update.message.reply_text("❌ ثبت سفارش موقتاً غیرفعال است.")
         return
     
-    with db.conn() as c:
-        items = c.execute("SELECT * FROM settings WHERE key LIKE 'order_item_%'").fetchall()
+    text = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
     
-    if not items:
-        await update.message.reply_text("❌ هنوز آیتم سفارشی تنظیم نشده است.")
-        return
-    
+    # ساخت دکمه‌ها به صورت ۲ تا در هر ردیف
     rows = []
-    for it in items:
-        try:
-            parts = it["value"].split("|")
-            name, coin, member = parts[0], int(parts[1]), int(parts[2])
-            rows.append([(f"{name} | {coin} سکه", f"order_pick:{it['key']}")])
-        except Exception:
-            continue
-    rows.append([("🔙 بازگشت", "back")])
-    await update.message.reply_text("📌 آیتم مورد نظر را انتخاب کنید:", reply_markup=inline(rows))
+    for i in range(0, len(ORDER_ITEMS), 2):
+        row = []
+        for item in ORDER_ITEMS[i:i+2]:
+            btn_text = f"👤 {item['members']} نفر = {item['coins']} الماس 💎"
+            row.append((btn_text, f"order_pick:{item['key']}"))
+        rows.append(row)
+    
+    await update.message.reply_text(
+        text,
+        reply_markup=inline(rows)
+    )
+
 
 # ==================== انتخاب آیتم ====================
 async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    await q.answer()
     user_id = q.from_user.id
     item_key = q.data.split(":", 1)[1]
     
-    with db.conn() as c:
-        row = c.execute("SELECT value FROM settings WHERE key = ?", (item_key,)).fetchone()
-    if not row:
-        await q.message.reply_text("❌ آیتم یافت نشد.")
+    # پیدا کردن آیتم
+    item = None
+    for it in ORDER_ITEMS:
+        if it["key"] == item_key:
+            item = it
+            break
+    
+    if not item:
+        await q.answer("❌ آیتم یافت نشد.", show_alert=True)
         return
     
-    try:
-        name, coin, member = row["value"].split("|")
-        coin, member = int(coin), int(member)
-    except Exception:
-        await q.message.reply_text("❌ خطای آیتم.")
-        return
-    
+    # چک موجودی
     user = get_user(user_id)
-    if user["coins"] < coin:
-        await q.answer(f"❌ موجودی کافی نیست! ({coin} سکه لازم است)", show_alert=True)
+    if user["coins"] < item["coins"]:
+        await q.answer("❌ الماس شما کافی نیست", show_alert=True)
         return
     
-    set_user_state(user_id, "order_channel", {"name": name, "coin": coin, "member": member})
-    await q.message.reply_text(
-        "📢 آیدی کانال خود را ارسال کنید (بدون @):\n\n"
-        "⚠️ حتماً ربات را ابتدا ادمین کانال کنید.",
-        reply_markup=back_button()
+    await q.answer()
+    
+    # ذخیره state و نمایش پیام درخواست کانال
+    set_user_state(user_id, "order_channel", {
+        "members": item["members"],
+        "coins": item["coins"],
+        "key": item_key,
+    })
+    
+    text = (
+        "✅جهت دریافت ممبر باید ابتدا ربات را ادمین کانال مورد نظر کنید سپس آیدی کانال را ارسال نمایید\n"
+        "\n"
+        "👈نمونه : @durov\n"
+        "\n"
+        "📌درصورتی که مشکلی در ادمین کردن ربات دارید دستور زیر را ارسال نمایید\n"
+        "/help"
     )
+    
+    await q.message.reply_text(text, reply_markup=back_button())
+
 
 # ==================== دریافت کانال ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -78,50 +102,132 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         return False
     
     text = (update.message.text or "").strip()
+    
     if text == "🔙 بازگشت":
         set_user_state(user_id, "none")
         await update.message.reply_text("🏠", reply_markup=main_menu())
         return True
     
+    # نرمال‌سازی آیدی کانال
     channel = normalize_channel(text)
-    if not is_valid_username(channel):
-        await update.message.reply_text("❌ آیدی کانال نامعتبر است.")
-        return True
     
-    if not await check_bot_admin(context, channel):
+    # چک معتبر بودن آیدی
+    if not is_valid_username(channel):
         await update.message.reply_text(
-            f"❌ ربات در کانال @{channel} ادمین نیست.\n"
-            f"لطفاً ابتدا ربات را ادمین کنید و دوباره تلاش کنید."
+            "❌آیدی ارسالی صحیح نمی باشد\n"
+            "\n"
+            "👈نمونه : @durov"
         )
         return True
     
+    # چک ادمین بودن ربات در کانال
+    if not await check_bot_admin(context, channel):
+        await update.message.reply_text(
+            f"❌ربات ادمین کانال @{channel} نیست\n"
+            f"\n"
+            f"👈جهت دریافت ممبر باید ابتدا ربات را ادمین کانال مورد نظر کنید سپس آیدی کانال خود را ارسال نمایید\n"
+            f"\n"
+            f"📌درصورتی که مشکلی در ادمین کردن ربات دارید دستور زیر را ارسال نمایید\n"
+            f"/help"
+        )
+        return True
+    
+    # دریافت اطلاعات کانال
     try:
         chat = await context.bot.get_chat(f"@{channel}")
         if chat.type not in ("channel", "supergroup"):
-            await update.message.reply_text("❌ فقط کانال یا سوپرگروه مجاز است.")
+            await update.message.reply_text(
+                "❌آیدی ارسالی صحیح نمی باشد\n"
+                "\n"
+                "👈نمونه : @durov"
+            )
             return True
-    except Exception as e:
-        await update.message.reply_text(f"❌ خطا در دریافت اطلاعات کانال: {e}")
+    except Exception:
+        await update.message.reply_text(
+            "❌آیدی ارسالی صحیح نمی باشد\n"
+            "\n"
+            "👈نمونه : @durov"
+        )
         return True
     
-    name = data.get("name", "")
-    coin = data.get("coin", 0)
-    member = data.get("member", 0)
+    members = data.get("members", 0)
+    coins = data.get("coins", 0)
     
-    if get_user(user_id)["coins"] < coin:
-        await update.message.reply_text("❌ موجودی کافی نیست.")
+    # ذخیره اطلاعات کانال در state
+    set_user_state(user_id, "order_confirm", {
+        "members": members,
+        "coins": coins,
+        "channel": channel,
+        "channel_title": chat.title,
+        "channel_desc": chat.description or "ندارد",
+        "channel_id": chat.id,
+    })
+    
+    # پیام اول: اطلاعات کانال
+    post_text = (
+        f"‼️نام کانال : {chat.title}\n"
+        f"\n"
+        f"📝توضیحات کانال: {chat.description or 'ندارد'}\n"
+        f"\n"
+        f"🆔@{channel}"
+    )
+    
+    sent = await update.message.reply_text(post_text, reply_markup=back_button())
+    
+    # پیام دوم: تأیید (با ریپلای)
+    confirm_text = (
+        f"👈آیا از درخواست {members} ممبر برای کانال فوق اطمینان دارید⁉️"
+    )
+    
+    await update.message.reply_text(
+        confirm_text,
+        reply_to_message_id=sent.message_id,
+        reply_markup=inline([
+            [("✅ بله", f"order_confirm_yes:{sent.message_id}"),
+             ("❌ خیر", "order_confirm_no")],
+        ])
+    )
+    return True
+
+
+# ==================== تأیید نهایی سفارش ====================
+async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    user_id = q.from_user.id
+    state, data = get_user_state(user_id)
+    
+    if state != "order_confirm":
+        await q.answer("❌ خطا. لطفاً دوباره تلاش کنید.", show_alert=True)
+        return
+    
+    members = data.get("members", 0)
+    coins = data.get("coins", 0)
+    channel = data.get("channel", "")
+    channel_id = data.get("channel_id")
+    channel_title = data.get("channel_title", "")
+    channel_desc = data.get("channel_desc", "ندارد")
+    
+    # چک موجودی دوباره
+    user = get_user(user_id)
+    if user["coins"] < coins:
+        await q.answer("❌ الماس شما کافی نیست", show_alert=True)
         set_user_state(user_id, "none")
-        return True
+        return
     
+    await q.answer()
+    
+    # ساخت پست تبلیغاتی
     bot_username = (await context.bot.get_me()).username
     post_text = (
-        f"‼️ نام کانال: {chat.title}\n\n"
-        f"📝 توضیحات: {chat.description or 'ندارد'}\n\n"
-        f"🆔 @{channel}"
+        f"‼️نام کانال : {channel_title}\n"
+        f"\n"
+        f"📝توضیحات کانال: {channel_desc}\n"
+        f"\n"
+        f"🆔@{channel}"
     )
     
     button = inline([
-        [(f"👤 سفارش {member} ممبر", "noop")],
+        [(f"👤 سفارش {members} ممبر", "noop")],
         [("💰 دریافت سکه", "claim_coin:0")],
         [("📢 عضویت در کانال", f"https://t.me/{channel}")],
         [("🚫 گزارش", "report:0")],
@@ -134,22 +240,25 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             reply_markup=button
         )
     except Exception as e:
-        await update.message.reply_text(f"❌ خطا در ارسال پست: {e}")
-        return True
+        await q.message.reply_text(f"❌ خطا در ارسال پست: {e}")
+        set_user_state(user_id, "none")
+        return
     
+    # ذخیره سفارش در دیتابیس
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, channel, chat.id, post.message_id, member, coin, now_ts() + Config.CANCEL_WAIT_SECONDS))
+        """, (user_id, channel, channel_id, post.message_id, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
     
+    # آپدیت دکمه‌های پست با order_id واقعی
     try:
         await context.bot.edit_message_reply_markup(
             chat_id=f"@{Config.ADS_CHANNEL}",
             message_id=post.message_id,
             reply_markup=inline([
-                [(f"👤 سفارش {member} ممبر", "noop")],
+                [(f"👤 سفارش {members} ممبر", "noop")],
                 [("💰 دریافت سکه", f"claim_coin:{order_id}")],
                 [("📢 عضویت در کانال", f"https://t.me/{channel}")],
                 [("🚫 گزارش", f"report:{order_id}")],
@@ -158,19 +267,38 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     except Exception:
         pass
     
-    remove_coins(user_id, coin, "order_create", f"سفارش #{order_id}")
+    # کسر الماس
+    remove_coins(user_id, coins, "order_create", f"سفارش #{order_id}")
     update_user(user_id, orders_count=(get_user(user_id)["orders_count"] + 1))
     
     set_user_state(user_id, "none")
-    await update.message.reply_text(
+    
+    await q.message.reply_text(
         f"✅ سفارش شما با موفقیت ثبت شد.\n"
         f"🆔 کد پیگیری: <code>{order_id}</code>\n"
-        f"👥 ممبر درخواستی: {member}\n"
-        f"💰 هزینه: {coin} سکه",
+        f"👥 ممبر درخواستی: {members}\n"
+        f"💰 هزینه: {coins} الماس",
         parse_mode="HTML",
         reply_markup=main_menu(is_admin(user_id))
     )
-    return True
+
+
+# ==================== لغو تأیید ====================
+async def order_confirm_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    user_id = q.from_user.id
+    set_user_state(user_id, "none")
+    await q.answer("لغو شد.")
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        user_id,
+        "🏠 منوی اصلی",
+        reply_markup=main_menu(is_admin(user_id))
+    )
+
 
 # ==================== دریافت سکه سفارش ====================
 async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -237,7 +365,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         c.execute("UPDATE users SET ads_joined = ads_joined + 1 WHERE user_id = ?", (user_id,))
     
-    # 👇 این خط جدید: بررسی پاداش زیرمجموعه
+    # بررسی پاداش زیرمجموعه
     await check_referral_milestone(context, user_id)
     
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
@@ -261,8 +389,10 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
 
+
 async def get_panel_join_coin(panel):
-    return Config.PANELS.get(panel, Config.PANELS["عادی"])["join_coin"]
+    return Config.PANELS.get(panel, "عادی")["join_coin"]
+
 
 # ==================== گزارش ====================
 async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -289,12 +419,20 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
+
 # ==================== روتر callback ====================
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
+    
     if data.startswith("order_pick:"):
         await order_pick(update, context)
+        return True
+    if data.startswith("order_confirm_yes:"):
+        await order_confirm_yes(update, context)
+        return True
+    if data == "order_confirm_no":
+        await order_confirm_no(update, context)
         return True
     if data.startswith("claim_coin:"):
         await claim_coin(update, context)
