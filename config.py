@@ -21,16 +21,16 @@ class Config:
     FORCE_CHANNEL_2 = os.getenv("FORCE_CHANNEL_2", "")
     
     # === تنظیمات پیش‌فرض ===
-    DEFAULT_COINS = 10
+    DEFAULT_COINS = 20
     DEFAULT_PANEL = "عادی"
     MAX_WARNINGS = 3
     DAILY_GIFT_COOLDOWN = 86400
     
     # === پنل‌ها ===
     PANELS = {
-        "عادی":     {"daily": 1, "join_coin": 1, "invite_coin": 5,  "upgrade_cost": 0},
-        "حرفه ای":  {"daily": 3, "join_coin": 2, "invite_coin": 10, "upgrade_cost": 50},
-        "ویژه":     {"daily": 5, "join_coin": 3, "invite_coin": 20, "upgrade_cost": 200},
+        "عادی":     {"daily": 3, "join_coin": 1.5, "invite_coin": 05,  "upgrade_cost": 0},
+        "حرفه ای":  {"daily": 4, "join_coin": 2, "invite_coin": 15, "upgrade_cost": 100},
+        "ویژه":     {"daily": 5, "join_coin": 2.5, "invite_coin": 20, "upgrade_cost": 200},
     }
     
     # === تنظیمات انتقال ===
