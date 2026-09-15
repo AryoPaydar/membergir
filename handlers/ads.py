@@ -281,7 +281,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # لینک پست در کانال
     post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post.message_id}"
     
-    # 👇 نمایش کد پیگیری با post.message_id
+    # نمایش کد پیگیری با post.message_id
     success_text = (
         f"✅سفارش شما با موفقیت ثبت شد\n"
         f"\n"
@@ -387,7 +387,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     new_coins = get_user(user_id)["coins"]
     
-    # toast سکه دریافتی
+    # toast سکه دریافتی — show_alert=False یعنی toast بالای صفحه
     await q.answer(
         f"💰 سکه دریافتی : {coin} سکه | موجودی کل : {new_coins:,} سکه",
         show_alert=False
