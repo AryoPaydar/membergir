@@ -57,40 +57,7 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text,
         parse_mode="HTML",
         reply_markup=inline([
-            [("🔰 دریافت بنر زیرمجموعه گیری", "referral_banner")],
-            [("🔙 بازگشت", "referral_back")],
-        ])
-    )
-
-
-# ==================== نمایش بنر زیرمجموعه‌گیری ====================
-async def referral_banner(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    
-    bot_username = (await context.bot.get_me()).username
-    ref_link = f"https://t.me/{bot_username}?start={user_id}"
-    
-    # الماس هدیه اولین ورود (از پنل کاربر)
-    user = get_user(user_id)
-    first_gift = Config.PANELS["عادی"]["invite_coin"] if user else 15
-    
-    text = (
-        f"🚀 با ممبرگیر هایو به راحتی اعضای کانال و گروه خود را بصورت (رایگان؛پولی) افزایش دهید!\n"
-        f"👥 افزایش اعضای کانال و گروه شما\n"
-        f"🇮🇷 دریافت ممبر ایرانی کاملا واقعی و فعال\n"
-        f"🎁 دریافت هدیه {first_gift} الماس برای اولین ورود شما\n"
-        f"⚡️ سریع و بدون آفلاینی\n"
-        f"💯اگه اعضای کانال و گروهت کمه امتحان کن👇\n"
-        f"{ref_link}"
-    )
-    
-    await q.message.reply_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=inline([
-            [("📤 ارسال بنر", f"share_referral_banner")],
+            [("🔰 دریافت بنر زیرمجموعه گیری", "share_referral_banner")],
             [("🔙 بازگشت", "referral_back")],
         ])
     )
