@@ -11,11 +11,13 @@ def get_user(user_id: int):
         return dict(r) if r else None
 
 def create_user(user_id: int, first_name: str = "", username: str = "", referrer_id: int = None):
+    from utils.helpers import jalali_now
+    today, _ = jalali_now()
     with db.conn() as c:
         c.execute("""
-            INSERT OR IGNORE INTO users (user_id, first_name, username, coins, referrer_id)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, first_name, username, Config.DEFAULT_COINS, referrer_id))
+            INSERT OR IGNORE INTO users (user_id, first_name, username, coins, referrer_id, today_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, first_name, username, Config.DEFAULT_COINS, referrer_id, today))
         return get_user(user_id)
 
 def update_user(user_id: int, **kwargs):
@@ -48,11 +50,23 @@ def add_coins(user_id: int, amount: int, tx_type: str = "add", desc: str = ""):
     """افزودن سکه به کاربر با ثبت تراکنش — اتمیک"""
     if amount == 0:
         return
+    from utils.helpers import jalali_now
+    today, _ = jalali_now()
     with db.conn() as c:
-        c.execute(
-            "UPDATE users SET coins = coins + ? WHERE user_id = ?",
-            (amount, user_id)
-        )
+        # اگه روز عوض شده، today_earned رو ریست کن
+        row = c.execute("SELECT today_date FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        if row and row["today_date"] != today:
+            c.execute(
+                "UPDATE users SET today_earned = 0, referral_today = 0, today_date = ? WHERE user_id = ?",
+                (today, user_id)
+            )
+        c.execute("""
+            UPDATE users
+            SET coins = coins + ?,
+                total_earned = total_earned + ?,
+                today_earned = today_earned + ?
+            WHERE user_id = ?
+        """, (amount, amount, amount, user_id))
         c.execute("""
             INSERT INTO transactions (to_id, amount, type, description)
             VALUES (?, ?, ?, ?)
@@ -64,10 +78,12 @@ def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str =
         row = c.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,)).fetchone()
         if not row or row["coins"] < amount:
             return False
-        c.execute(
-            "UPDATE users SET coins = coins - ? WHERE user_id = ?",
-            (amount, user_id)
-        )
+        c.execute("""
+            UPDATE users
+            SET coins = coins - ?,
+                total_spent = total_spent + ?
+            WHERE user_id = ?
+        """, (amount, amount, user_id))
         c.execute("""
             INSERT INTO transactions (from_id, amount, type, description)
             VALUES (?, ?, ?, ?)
@@ -82,10 +98,10 @@ def transfer_coins(from_id: int, to_id: int, amount: int) -> bool:
         row = c.execute("SELECT coins FROM users WHERE user_id = ?", (from_id,)).fetchone()
         if not row or row["coins"] < amount:
             return False
-        c.execute("UPDATE users SET coins = coins - ?, sent_coins = sent_coins + ? WHERE user_id = ?",
-                  (amount, amount, from_id))
-        c.execute("UPDATE users SET coins = coins + ?, received_coins = received_coins + ? WHERE user_id = ?",
-                  (amount, amount, to_id))
+        c.execute("UPDATE users SET coins = coins - ?, sent_coins = sent_coins + ?, total_spent = total_spent + ? WHERE user_id = ?",
+                  (amount, amount, amount, from_id))
+        c.execute("UPDATE users SET coins = coins + ?, received_coins = received_coins + ?, total_earned = total_earned + ? WHERE user_id = ?",
+                  (amount, amount, amount, to_id))
         c.execute("""
             INSERT INTO transactions (from_id, to_id, amount, type, description)
             VALUES (?, ?, ?, 'transfer', ?)
