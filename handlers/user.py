@@ -45,6 +45,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         update_user(user.id, first_name=user.first_name or "", username=user.username or "")
         update_user(user.id, state="none")
+        
+        # ریست شمارنده‌های روزانه اگه روز عوض شده
+        today, _ = jalali_now()
+        if db_user.get("today_date") != today:
+            with db.conn() as c:
+                c.execute("""
+                    UPDATE users
+                    SET today_earned = 0, referral_today = 0, today_date = ?
+                    WHERE user_id = ?
+                """, (today, user.id))
     
     # چک جوین اجباری
     if not await check_force_join(context, user.id):
@@ -73,7 +83,6 @@ async def check_force_join(context, user_id):
         buttons.append([(f"عضویت در @{ch}", f"https://t.me/{ch}")])
     buttons.append([("✅ عضو شدم", "check_join")])
     
-    # ارسال به صورت شیشه‌ای
     from telegram import InlineKeyboardMarkup
     await context.bot.send_message(
         user_id, text,
@@ -91,6 +100,13 @@ async def handle_referral_join(context, referrer_id, new_user_id):
     coin = get_invite_coin(referrer)
     add_coins(referrer_id, coin, "referral", f"زیرمجموعه جدید: {new_user_id}")
     
+    # افزایش شمارنده امروز
+    with db.conn() as c:
+        c.execute(
+            "UPDATE users SET referral_today = referral_today + 1 WHERE user_id = ?",
+            (referrer_id,)
+        )
+    
     try:
         await context.bot.send_message(
             referrer_id,
@@ -100,7 +116,6 @@ async def handle_referral_join(context, referrer_id, new_user_id):
     except Exception:
         pass
     
-    # گزارش به ادمین
     if get_setting("referral_report", "on") == "on":
         try:
             await context.bot.send_message(
@@ -117,7 +132,6 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("لطفاً /start را بزنید.")
         return
     
-    from utils.texts import get_referral_count
     text = account_text(user)
     await update.message.reply_text(
         text, parse_mode="HTML",
@@ -197,10 +211,14 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer()
         await q.message.delete()
     else:
-        # به روترهای دیگر پاس می‌دهیم
         from handlers import ads, shop, admin, transfer, referral, gift
         for module in (ads, shop, admin, transfer, referral, gift):
             if hasattr(module, "handle_callback"):
                 if await module.handle_callback(update, context):
                     return
         await q.answer()
+
+# ==================== State Handler ====================
+async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """این ماژول state ندارد."""
+    return False
