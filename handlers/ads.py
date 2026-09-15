@@ -212,13 +212,11 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await q.answer()
     
-    # پاک کردن پیام تأیید
     try:
         await q.message.delete()
     except Exception:
         pass
     
-    # ساخت پست تبلیغاتی
     post_text = (
         f"‼️نام کانال : {channel_title}\n"
         f"\n"
@@ -249,7 +247,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_user_state(user_id, "none")
         return
     
-    # ذخیره سفارش در دیتابیس
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
@@ -257,7 +254,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (user_id, channel, channel_id, post.message_id, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
     
-    # آپدیت دکمه‌های پست
     try:
         await context.bot.edit_message_reply_markup(
             chat_id=f"@{Config.ADS_CHANNEL}",
@@ -272,16 +268,13 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     
-    # کسر الماس
     remove_coins(user_id, coins, "order_create", f"سفارش #{order_id}")
     update_user(user_id, orders_count=(get_user(user_id)["orders_count"] + 1))
     
     set_user_state(user_id, "none")
     
-    # لینک پست در کانال
     post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post.message_id}"
     
-    # نمایش کد پیگیری با post.message_id
     success_text = (
         f"✅سفارش شما با موفقیت ثبت شد\n"
         f"\n"
@@ -323,6 +316,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
     
+    # === چک اول: سفارش وجود داره؟ ===
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         if not order:
@@ -350,17 +344,21 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("❌ ظرفیت این سفارش پر شده.", show_alert=True)
         return
     
+    # === چک عضویت در کانال سفارش ===
     if not await check_membership(context, order["channel"], user_id):
         await q.answer("❌ ابتدا در کانال عضو شوید.", show_alert=True)
         return
     
+    # === چک عضویت در کانال تبلیغات ===
     if not await check_membership(context, Config.ADS_CHANNEL, user_id):
         await q.answer("❌ ابتدا در کانال تبلیغات عضو شوید.", show_alert=True)
         return
     
+    # === همه چک‌ها گذشت: ثبت + سکه ===
     user = get_user(user_id)
     coin = get_panel_join_coin(user["panel"])
     
+    success = False
     with db.conn() as c:
         dup = c.execute(
             "SELECT 1 FROM order_members WHERE order_id = ? AND user_id = ?",
@@ -370,31 +368,48 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("❌ قبلاً ثبت شده.", show_alert=True)
             return
         
-        c.execute("""
-            INSERT INTO order_members (order_id, user_id)
-            VALUES (?, ?)
-        """, (order_id, user_id))
-        
-        c.execute("""
+        cur = c.execute("""
             UPDATE orders SET member_received = member_received + 1
             WHERE id = ? AND member_received < member_target
         """, (order_id,))
         
-        c.execute("UPDATE users SET ads_joined = ads_joined + 1 WHERE user_id = ?", (user_id,))
+        if cur.rowcount > 0:
+            c.execute("""
+                INSERT INTO order_members (order_id, user_id)
+                VALUES (?, ?)
+            """, (order_id, user_id))
+            
+            c.execute("UPDATE users SET ads_joined = ads_joined + 1 WHERE user_id = ?", (user_id,))
+            success = True
     
-    await check_referral_milestone(context, user_id)
+    if not success:
+        await q.answer("❌ ثبت نشد. دوباره تلاش کنید.", show_alert=True)
+        return
+    
+    # === پاداش زیرمجموعه (بدون خطا) ===
+    try:
+        await check_referral_milestone(context, user_id)
+    except Exception:
+        pass
+    
+    # === افزودن الماس ===
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
     
-    new_coins = get_user(user_id)["coins"]
+    new_user = get_user(user_id)
+    new_coins = new_user["coins"] if new_user else 0
     
-    # toast سکه دریافتی — show_alert=False یعنی toast بالای صفحه
+    # === toast: این مهم‌ترین خطه ===
     await q.answer(
         f"💰 سکه دریافتی : {coin} سکه | موجودی کل : {new_coins:,} سکه",
         show_alert=False
     )
     
+    # === بررسی اتمام سفارش ===
     with db.conn() as c:
-        o = c.execute("SELECT member_received, member_target, post_id, admin_id, channel FROM orders WHERE id=?", (order_id,)).fetchone()
+        o = c.execute(
+            "SELECT member_received, member_target, post_id, admin_id, channel FROM orders WHERE id=?",
+            (order_id,)
+        ).fetchone()
         if o and o["member_received"] >= o["member_target"]:
             c.execute("UPDATE orders SET status = 'completed' WHERE id = ?", (order_id,))
             try:
