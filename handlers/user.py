@@ -221,10 +221,11 @@ async def daily_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def go_to_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    await q.message.reply_text(
-        "🛍 برای خرید الماس، از منوی زیر روی «🛍 فروشگاه» بزنید."
-    )
-
+    
+    # مستقیم پنل فروشگاه رو باز کن
+    from handlers import shop
+    await shop.shop_menu_from_callback(update, context)
+    
 # ==================== بازگشت به منو ====================
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
