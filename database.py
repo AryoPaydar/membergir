@@ -46,9 +46,30 @@ class Database:
                     received_coins  INTEGER DEFAULT 0,
                     sent_coins      INTEGER DEFAULT 0,
                     state           TEXT DEFAULT 'none',
-                    state_data      TEXT
+                    state_data      TEXT,
+                    total_earned    INTEGER DEFAULT 0,
+                    total_spent     INTEGER DEFAULT 0,
+                    today_earned    INTEGER DEFAULT 0,
+                    today_date      TEXT,
+                    referral_today  INTEGER DEFAULT 0
                 )
             """)
+            
+            # === اضافه کردن ستون‌های جدید به دیتابیس موجود ===
+            existing_columns = [row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()]
+            new_columns = {
+                "total_earned": "INTEGER DEFAULT 0",
+                "total_spent": "INTEGER DEFAULT 0",
+                "today_earned": "INTEGER DEFAULT 0",
+                "today_date": "TEXT",
+                "referral_today": "INTEGER DEFAULT 0",
+            }
+            for col, col_type in new_columns.items():
+                if col not in existing_columns:
+                    try:
+                        c.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+                    except Exception:
+                        pass
             
             # === سفارشات ممبر ===
             c.execute("""
@@ -93,7 +114,7 @@ class Database:
                 )
             """)
             
-            # === تراکنشها ===
+            # === تراکنش‌ها ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS transactions (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,7 +142,7 @@ class Database:
             c.execute("""
                 CREATE TABLE IF NOT EXISTS shop_items (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    item_type   TEXT NOT NULL,   -- 'coin' یا 'panel'
+                    item_type   TEXT NOT NULL,
                     name        TEXT,
                     price       INTEGER,
                     coin_amount INTEGER,
@@ -131,7 +152,7 @@ class Database:
                 )
             """)
             
-            # === متنها و تنظیمات ===
+            # === متن‌ها و تنظیمات ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     key         TEXT PRIMARY KEY,
@@ -148,7 +169,7 @@ class Database:
                 )
             """)
             
-            # === ایندکسها ===
+            # === ایندکس‌ها ===
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_admin ON orders(admin_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_tx_from ON transactions(from_id)")
