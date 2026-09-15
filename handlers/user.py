@@ -138,29 +138,91 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=inline([[("🔗 اشتراک آیدی من", f"share_id")]])
     )
 
-# ==================== دریافت سکه روزانه ====================
+# ==================== دریافت سکه (منوی الماس رایگان) ====================
 async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(update.effective_user.id)
     if not user:
+        await update.message.reply_text("لطفاً /start را بزنید.")
+        return
+    
+    text = (
+        "به بخش دریافت الماس رایگان خوش آمدید🌹\n"
+        "\n"
+        "📌در این بخش میتونید با استفاده از سه روش زیر برای خودتون الماس جمع آوری کنید سپس با الماس های جمع آوری شده برای کانال/گروه خود ممبر سفارش بدید.\n"
+        "\n"
+        "\n"
+        "👈 سه روش برای جمع آوری الماس وجود دارد:\n"
+        "\n"
+        "1⃣ دریافت الماس روزانه: با استفاده از بخش میتوانید در ربات با زدن یک دکمه مقدار 3 الماس دریافت کنید.\n"
+        "\n"
+        "2⃣ عضویت در سفارش های موجود: در این روش شما میتوانید با عضویت در سفارشات موجود و سپس زدن دکمه ی دریافت  اقدام به جمع آوری الماس نمایید.\n"
+        "\n"
+        "3️⃣ خرید الماس : شما میتوانید با خرید الماس به سادگی و بدون عضویت مقدار ممبر مورد نیاز خود را تهیه فرمایید.\n"
+        "\n"
+        "🫂 همچنین از طریق زیر مجموعه گیری هم میتونید تا بینهایت الماس رایگان کسب کنید.\n"
+    )
+    
+    ads_channel = Config.ADS_CHANNEL or ""
+    
+    keyboard = inline([
+        [("📢 عضویت در کانال", f"https://t.me/{ads_channel}")],
+        [("💎 الماس روزانه", "daily_gift_claim")],
+        [("🛍 خرید الماس", "go_to_shop")],
+    ])
+    
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+# ==================== کلیک روی دکمه الماس روزانه ====================
+async def daily_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    user_id = q.from_user.id
+    user = get_user(user_id)
+    if not user:
+        await q.answer("❌ لطفاً ابتدا /start را بزنید.", show_alert=True)
         return
     
     now = now_ts()
-    if now < user["last_daily"] + Config.DAILY_GIFT_COOLDOWN:
-        remaining = user["last_daily"] + Config.DAILY_GIFT_COOLDOWN - now
+    cooldown = Config.DAILY_GIFT_COOLDOWN
+    last_daily = user.get("last_daily") or 0
+    next_time = last_daily + cooldown
+    
+    if now < next_time:
+        remaining = next_time - now
         hours = remaining // 3600
-        await update.message.reply_text(
+        minutes = (remaining % 3600) // 60
+        time_str = f"{hours:02d}:{minutes:02d}"
+        
+        await q.answer(
             f"⏳ شما قبلاً هدیه امروز را دریافت کرده‌اید.\n"
-            f"🕐 زمان باقی‌مانده: {hours} ساعت"
+            f"🕐 زمان باقی‌مانده: {time_str}",
+            show_alert=True
         )
         return
     
     amount = get_daily_gift(user)
-    add_coins(user["user_id"], amount, "daily", "هدیه روزانه")
-    update_user(user["user_id"], last_daily=now)
+    add_coins(user_id, amount, "daily", "هدیه روزانه")
+    update_user(user_id, last_daily=now)
     
-    await update.message.reply_text(
-        f"🎉 تبریک!\n💰 {amount} سکه به حساب شما اضافه شد.\n"
-        f"💳 موجودی جدید: {user['coins'] + amount:,}"
+    new_user = get_user(user_id)
+    new_balance = new_user.get("coins", 0)
+    
+    await q.answer(
+        f"🎉 تبریک!\n"
+        f"💰 {amount} سکه به حساب شما اضافه شد.\n"
+        f"💳 موجودی جدید: {new_balance:,}",
+        show_alert=True
+    )
+
+# ==================== دکمه خرید الماس ====================
+async def go_to_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    await q.message.reply_text(
+        "🛍 برای خرید الماس، از منوی زیر روی «🛍 فروشگاه» بزنید."
     )
 
 # ==================== بازگشت به منو ====================
@@ -187,7 +249,10 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await q.answer()
     user_id = q.from_user.id
     if await check_force_join(context, user_id):
-        await q.message.delete()
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
         user = get_user(user_id)
         if user:
             await context.bot.send_message(
@@ -198,25 +263,32 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await q.answer("❌ هنوز عضو نشده‌اید!", show_alert=True)
 
-async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """روتر callback ها"""
+# ==================== روتر callback ====================
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """روتر callback برای user.py"""
     q = update.callback_query
     data = q.data
     
     if data == "share_id":
         await share_id(update, context)
-    elif data == "check_join":
+        return True
+    if data == "check_join":
         await check_join_callback(update, context)
-    elif data == "back":
+        return True
+    if data == "daily_gift_claim":
+        await daily_gift_claim(update, context)
+        return True
+    if data == "go_to_shop":
+        await go_to_shop(update, context)
+        return True
+    if data == "back":
         await q.answer()
-        await q.message.delete()
-    else:
-        from handlers import ads, shop, admin, transfer, referral, gift
-        for module in (ads, shop, admin, transfer, referral, gift):
-            if hasattr(module, "handle_callback"):
-                if await module.handle_callback(update, context):
-                    return
-        await q.answer()
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
+        return True
+    return False
 
 # ==================== State Handler ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
