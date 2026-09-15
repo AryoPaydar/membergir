@@ -24,6 +24,11 @@ ORDER_ITEMS = [
 ]
 
 
+# ==================== تابع دریافت سکه عضویت (sync) ====================
+def get_panel_join_coin(panel):
+    return Config.PANELS.get(panel, "عادی")["join_coin"]
+
+
 # ==================== منوی سفارش ====================
 async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -66,7 +71,7 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     user = get_user(user_id)
-    if user["coins"] < item["coins"]:
+    if not user or user["coins"] < item["coins"]:
         await q.answer("❌ الماس شما کافی نیست", show_alert=True)
         return
     
@@ -205,7 +210,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channel_desc = data.get("channel_desc", "ندارد")
     
     user = get_user(user_id)
-    if user["coins"] < coins:
+    if not user or user["coins"] < coins:
         await q.answer("❌ الماس شما کافی نیست", show_alert=True)
         set_user_state(user_id, "none")
         return
@@ -354,10 +359,20 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("❌ ابتدا در کانال تبلیغات عضو شوید.", show_alert=True)
         return
     
-    # === همه چک‌ها گذشت: ثبت + سکه ===
+    # === اطمینان از وجود کاربر ===
     user = get_user(user_id)
+    if not user:
+        from bot_manager import create_user
+        create_user(user_id, q.from_user.first_name or "", q.from_user.username or "")
+        user = get_user(user_id)
+        if not user:
+            await q.answer("❌ خطا در ایجاد کاربر. لطفاً /start بزنید.", show_alert=True)
+            return
+    
+    # 👇 حالا تابع sync رو بدون await صدا بزن
     coin = get_panel_join_coin(user["panel"])
     
+    # === ثبت + سکه در یک تراکنش ===
     success = False
     with db.conn() as c:
         dup = c.execute(
@@ -386,7 +401,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("❌ ثبت نشد. دوباره تلاش کنید.", show_alert=True)
         return
     
-    # === پاداش زیرمجموعه (بدون خطا) ===
+    # === پاداش زیرمجموعه ===
     try:
         await check_referral_milestone(context, user_id)
     except Exception:
@@ -398,7 +413,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_user = get_user(user_id)
     new_coins = new_user["coins"] if new_user else 0
     
-    # === toast: این مهم‌ترین خطه ===
+    # === toast ===
     await q.answer(
         f"💰 سکه دریافتی : {coin} سکه | موجودی کل : {new_coins:,} سکه",
         show_alert=False
@@ -423,10 +438,6 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception:
                 pass
-
-
-async def get_panel_join_coin(panel):
-    return Config.PANELS.get(panel, "عادی")["join_coin"]
 
 
 # ==================== گزارش ====================
@@ -459,6 +470,22 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
+    
+    # فقط callback های مربوط به ads
+    if not (
+        data.startswith("order_pick:") or
+        data.startswith("order_confirm_yes:") or
+        data == "order_confirm_no" or
+        data.startswith("claim_coin:") or
+        data.startswith("report:")
+    ):
+        return False
+    
+    # اطمینان از وجود کاربر توی دیتابیس
+    user = get_user(q.from_user.id)
+    if not user:
+        from bot_manager import create_user
+        create_user(q.from_user.id, q.from_user.first_name or "", q.from_user.username or "")
     
     if data.startswith("order_pick:"):
         await order_pick(update, context)
