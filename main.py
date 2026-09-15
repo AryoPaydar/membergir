@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 USER_BUTTONS = {
     "💰 دریافت سکه": user.daily_coin,
     "👤 حساب کاربری": user.account,
-    "🚀  ثبت سفارش": ads.order_menu,
+    "🚀 ثبت سفارش": ads.order_menu,
     "👥 زیرمجموعه‌گیری": referral.referral_menu,
     "🎁 کد هدیه": gift.gift_menu,
     "🛍 فروشگاه": shop.shop_menu,
