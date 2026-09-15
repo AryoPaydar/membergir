@@ -4,7 +4,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMa
 def main_menu(is_admin=False):
     rows = [
         ["💰 دریافت سکه", "👤 حساب کاربری"],
-        ["📌 ثبت سفارش", "👥 زیرمجموعه‌گیری"],
+        ["🚀  ثبت سفارش", "👥 زیرمجموعه‌گیری"],
         ["🎁 کد هدیه", "🛍 فروشگاه"],
         ["🚀 ارتقا پنل", "🏆 برترین‌ها"],
         ["📋 پیگیری سفارش", "📜 تاریخچه تراکنش"],
