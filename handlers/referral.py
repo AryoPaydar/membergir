@@ -9,12 +9,10 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bot_username = (await context.bot.get_me()).username
     
-    # چک تنظیمات
     if get_setting("referral_enabled", "on") != "on":
         await update.message.reply_text("❌ زیرمجموعه‌گیری غیرفعال است.")
         return
     
-    # آمار زیرمجموعه
     from database import db
     with db.conn() as c:
         count = c.execute("SELECT COUNT(*) c FROM users WHERE referrer_id = ?", (user.id,)).fetchone()["c"]
@@ -138,3 +136,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("✅")
         return True
     return False
+
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return await referral_callback(update, context)
