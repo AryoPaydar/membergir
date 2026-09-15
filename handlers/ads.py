@@ -35,7 +35,6 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
     
-    # ساخت دکمه‌ها به صورت ۲ تا در هر ردیف
     rows = []
     for i in range(0, len(ORDER_ITEMS), 2):
         row = []
@@ -56,7 +55,6 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     item_key = q.data.split(":", 1)[1]
     
-    # پیدا کردن آیتم
     item = None
     for it in ORDER_ITEMS:
         if it["key"] == item_key:
@@ -67,7 +65,6 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("❌ آیتم یافت نشد.", show_alert=True)
         return
     
-    # چک موجودی
     user = get_user(user_id)
     if user["coins"] < item["coins"]:
         await q.answer("❌ الماس شما کافی نیست", show_alert=True)
@@ -75,7 +72,6 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await q.answer()
     
-    # ذخیره state و نمایش پیام درخواست کانال
     set_user_state(user_id, "order_channel", {
         "members": item["members"],
         "coins": item["coins"],
@@ -94,6 +90,19 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.message.reply_text(text, reply_markup=back_button())
 
 
+# ==================== چک معتبر بودن آیدی (فقط با @) ====================
+def is_valid_at_channel(text: str) -> bool:
+    """
+    فقط آیدی‌هایی رو قبول می‌کنه که:
+    - با @ شروع می‌شن
+    - بعدش ۵ تا ۳۲ کاراکتر انگلیسی/عدد/آندرلاین
+    """
+    if not text or not text.startswith("@"):
+        return False
+    import re
+    return bool(re.match(r"^@[a-zA-Z0-9_]{5,32}$", text.strip()))
+
+
 # ==================== دریافت کانال ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
@@ -108,11 +117,8 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("🏠", reply_markup=main_menu())
         return True
     
-    # نرمال‌سازی آیدی کانال
-    channel = normalize_channel(text)
-    
-    # چک معتبر بودن آیدی
-    if not is_valid_username(channel):
+    # === چک معتبر بودن آیدی ===
+    if not is_valid_at_channel(text):
         await update.message.reply_text(
             "❌آیدی ارسالی صحیح نمی باشد\n"
             "\n"
@@ -120,7 +126,10 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
     
-    # چک ادمین بودن ربات در کانال
+    # حالا channel بدون @
+    channel = text[1:]  # حذف @
+    
+    # چک ادمین بودن ربات
     if not await check_bot_admin(context, channel):
         await update.message.reply_text(
             f"❌ربات ادمین کانال @{channel} نیست\n"
@@ -153,7 +162,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     members = data.get("members", 0)
     coins = data.get("coins", 0)
     
-    # ذخیره اطلاعات کانال در state
     set_user_state(user_id, "order_confirm", {
         "members": members,
         "coins": coins,
@@ -163,7 +171,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         "channel_id": chat.id,
     })
     
-    # پیام اول: اطلاعات کانال
     post_text = (
         f"‼️نام کانال : {chat.title}\n"
         f"\n"
@@ -174,7 +181,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     
     sent = await update.message.reply_text(post_text, reply_markup=back_button())
     
-    # پیام دوم: تأیید (با ریپلای)
     confirm_text = (
         f"👈آیا از درخواست {members} ممبر برای کانال فوق اطمینان دارید⁉️"
     )
@@ -207,7 +213,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channel_title = data.get("channel_title", "")
     channel_desc = data.get("channel_desc", "ندارد")
     
-    # چک موجودی دوباره
     user = get_user(user_id)
     if user["coins"] < coins:
         await q.answer("❌ الماس شما کافی نیست", show_alert=True)
@@ -216,8 +221,13 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await q.answer()
     
+    # پاک کردن پیام تأیید
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    
     # ساخت پست تبلیغاتی
-    bot_username = (await context.bot.get_me()).username
     post_text = (
         f"‼️نام کانال : {channel_title}\n"
         f"\n"
@@ -240,7 +250,11 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=button
         )
     except Exception as e:
-        await q.message.reply_text(f"❌ خطا در ارسال پست: {e}")
+        await context.bot.send_message(
+            user_id,
+            f"❌ خطا در ارسال پست: {e}",
+            reply_markup=main_menu(is_admin(user_id))
+        )
         set_user_state(user_id, "none")
         return
     
@@ -273,13 +287,24 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     set_user_state(user_id, "none")
     
-    await q.message.reply_text(
-        f"✅ سفارش شما با موفقیت ثبت شد.\n"
-        f"🆔 کد پیگیری: <code>{order_id}</code>\n"
-        f"👥 ممبر درخواستی: {members}\n"
-        f"💰 هزینه: {coins} الماس",
+    # لینک پست در کانال
+    post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post.message_id}"
+    
+    success_text = (
+        f"✅سفارش شما با موفقیت ثبت شد\n"
+        f"\n"
+        f"🔍 کد پیگیری سفارش شما {order_id} می باشد\n"
+        f" \n"
+        f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
+    )
+    
+    await context.bot.send_message(
+        user_id,
+        success_text,
         parse_mode="HTML",
-        reply_markup=main_menu(is_admin(user_id))
+        reply_markup=inline([
+            [("🔍 مشاهده سفارش", post_link)],
+        ])
     )
 
 
@@ -371,7 +396,13 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
     
     new_coins = get_user(user_id)["coins"]
-    await q.answer(f"✅ {coin} سکه دریافت کردید!\n💰 موجودی: {new_coins:,}", show_alert=False)
+    
+    # 👇 نوتیفیکیشن بالای صفحه (show_alert=False یعنی پاپ‌آپ، true یعنی هشدار)
+    # برای نمایش بالای صفحه (toast)، همیشه show_alert=False
+    await q.answer(
+        f"💰 سکه دریافتی : {coin} سکه | موجودی کل : {new_coins:,} سکه",
+        show_alert=False
+    )
     
     with db.conn() as c:
         o = c.execute("SELECT member_received, member_target, post_id, admin_id, channel FROM orders WHERE id=?", (order_id,)).fetchone()
