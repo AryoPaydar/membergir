@@ -288,6 +288,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
     )
     
+    # 👇 پیام موفقیت + دکمه شیشه‌ای مشاهده سفارش
     await context.bot.send_message(
         user_id,
         success_text,
@@ -296,8 +297,14 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [("🔍 مشاهده سفارش", post_link)],
         ])
     )
-
-
+    
+    # 👇 حالا یه پیام کوتاه با ReplyKeyboard منوی اصلی بفرست
+    await context.bot.send_message(
+        user_id,
+        "🏠 منوی اصلی",
+        reply_markup=main_menu(is_admin(user_id))
+    )
+    
 # ==================== لغو تأیید ====================
 async def order_confirm_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
