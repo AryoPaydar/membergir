@@ -285,23 +285,16 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"\n"
         f"🔍 کد پیگیری سفارش شما {post.message_id} می باشد\n"
         f" \n"
-        f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
+        f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است.\n"
+        f"\n"
+        f"🔗 <a href='{post_link}'>مشاهده سفارش</a>"
     )
     
-    # 👇 پیام موفقیت + دکمه شیشه‌ای مشاهده سفارش
+    # 👇 یک پیام، هم متن موفقیت، هم ReplyKeyboard
     await context.bot.send_message(
         user_id,
         success_text,
         parse_mode="HTML",
-        reply_markup=inline([
-            [("🔍 مشاهده سفارش", post_link)],
-        ])
-    )
-    
-    # 👇 حالا یه پیام کوتاه با ReplyKeyboard منوی اصلی بفرست
-    await context.bot.send_message(
-        user_id,
-        "🏠 منوی اصلی",
         reply_markup=main_menu(is_admin(user_id))
     )
     
