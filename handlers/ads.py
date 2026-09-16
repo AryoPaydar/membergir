@@ -285,19 +285,27 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"\n"
         f"🔍 کد پیگیری سفارش شما {post.message_id} می باشد\n"
         f" \n"
-        f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است.\n"
-        f"\n"
-        f"🔗 <a href='{post_link}'>مشاهده سفارش</a>"
+        f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
     )
     
-    # 👇 یک پیام، هم متن موفقیت، هم ReplyKeyboard
+    # === پیام موفقیت با دکمه شیشه‌ای مشاهده سفارش ===
     await context.bot.send_message(
         user_id,
         success_text,
         parse_mode="HTML",
-        reply_markup=main_menu(is_admin(user_id))
+        reply_markup=inline([
+            [("🔍 مشاهده سفارش", post_link)],
+        ])
     )
     
+    # === پیام نامرئی برای فعال‌سازی ReplyKeyboard منوی اصلی ===
+    await context.bot.send_message(
+        user_id,
+        "\u2063",
+        reply_markup=main_menu(is_admin(user_id))
+    )
+
+
 # ==================== لغو تأیید ====================
 async def order_confirm_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -566,11 +574,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         data.startswith("show_profile:")
     ):
         return False
-    
-    # 👇 حالا اینجا کاربر رو خودکار نمی‌سازیم — چون چک استارت رو توی خود توابع انجام میدیم
-    # user = get_user(q.from_user.id)
-    # if not user:
-    #     create_user(...)
     
     if data.startswith("order_pick:"):
         await order_pick(update, context)
