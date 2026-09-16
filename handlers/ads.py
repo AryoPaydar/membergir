@@ -298,12 +298,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
     
-    # === پیام نامرئی برای فعال‌سازی ReplyKeyboard منوی اصلی ===
-    await context.bot.send_message(
-        user_id,
-        "\u2063",
-        reply_markup=main_menu(is_admin(user_id))
-    )
+
 
 
 # ==================== لغو تأیید ====================
