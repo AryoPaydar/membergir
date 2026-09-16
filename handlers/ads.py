@@ -321,6 +321,17 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
     
+    # === چک ۱: کاربر ربات رو استارت کرده؟ ===
+    user = get_user(user_id)
+    if not user:
+        bot_username = (await context.bot.get_me()).username
+        await q.answer(
+            f"برای استفاده از کانال ابتدا ربات زیر را start کنید :\n@{bot_username}",
+            show_alert=True
+        )
+        return
+    
+    # === چک ۲: سفارش ===
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         if not order:
@@ -355,15 +366,6 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_membership(context, Config.ADS_CHANNEL, user_id):
         await q.answer("❌ ابتدا در کانال تبلیغات عضو شوید.", show_alert=True)
         return
-    
-    user = get_user(user_id)
-    if not user:
-        from bot_manager import create_user
-        create_user(user_id, q.from_user.first_name or "", q.from_user.username or "")
-        user = get_user(user_id)
-        if not user:
-            await q.answer("❌ خطا در ایجاد کاربر. لطفاً /start بزنید.", show_alert=True)
-            return
     
     coin = get_panel_join_coin(user["panel"])
     
@@ -436,6 +438,17 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
     
+    # === چک ۱: کاربر ربات رو استارت کرده؟ ===
+    user = get_user(user_id)
+    if not user:
+        bot_username = (await context.bot.get_me()).username
+        await q.answer(
+            f"برای استفاده از کانال ابتدا ربات زیر را start کنید :\n@{bot_username}",
+            show_alert=True
+        )
+        return
+    
+    # === ثبت گزارش ===
     with db.conn() as c:
         if c.execute("SELECT 1 FROM order_reports WHERE order_id=? AND reporter_id=?", (order_id, user_id)).fetchone():
             await q.answer("❌ قبلاً گزارش داده‌اید.", show_alert=True)
@@ -554,10 +567,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ):
         return False
     
-    user = get_user(q.from_user.id)
-    if not user:
-        from bot_manager import create_user
-        create_user(q.from_user.id, q.from_user.first_name or "", q.from_user.username or "")
+    # 👇 حالا اینجا کاربر رو خودکار نمی‌سازیم — چون چک استارت رو توی خود توابع انجام میدیم
+    # user = get_user(q.from_user.id)
+    # if not user:
+    #     create_user(...)
     
     if data.startswith("order_pick:"):
         await order_pick(update, context)
