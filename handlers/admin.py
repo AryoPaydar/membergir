@@ -41,11 +41,11 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         running = c.execute("SELECT COUNT(*) c FROM orders WHERE status='running'").fetchone()["c"]
     
     text = (
-        f"📈 <b>آمار ربات</b>\n\n"
-        f"👥 کل کاربران: {total:,}\n"
-        f"⛔️ بن‌شده: {banned:,}\n"
-        f"📌 کل سفارشات: {orders:,}\n"
-        f"🔄 در حال اجرا: {running:,}\n"
+        f"📈 <b>آمار ربات</b>nn"
+        f"👥 کل کاربران: {total:,}n"
+        f"⛔️ بن‌شده: {banned:,}n"
+        f"📌 کل سفارشات: {orders:,}n"
+        f"🔄 در حال اجرا: {running:,}n"
         f"💰 موجودی فروشگاه: {format_number(get_setting('shop_balance', '0'))} ریال"
     )
     await update.message.reply_text(text, parse_mode="HTML")
@@ -162,14 +162,14 @@ def user_search_result_text(users, page):
     per_page = 10
     start = page * per_page
     chunk = users[start:start+per_page]
-    txt = f"{len(users)} کاربر یافت شد:\n\n"
+    txt = f"{len(users)} کاربر یافت شد:nn"
     for i, u in enumerate(chunk, start+1):
         name = u["first_name"] or "کاربر"
         username = f"@{u['username']}" if u["username"] else "ندارد"
         txt += (
-            f"{i}. نام کاربری : {name}\n"
-            f"🆔 یوزرنیم : {username}\n"
-            f"🔰 شماره کاربری : {u['user_id']}\n\n"
+            f"{i}. نام کاربری : {name}n"
+            f"🆔 یوزرنیم : {username}n"
+            f"🔰 شماره کاربری : {u['user_id']}nn"
         )
     return txt, chunk
 
@@ -211,7 +211,7 @@ async def handle_bc_user_search(update, context, text):
     users = await do_user_search(update, text)
     if not users:
         await update.message.reply_text(
-            "کاربری با مشخصات ارسالی یافت نشد\nلطفا دوباره ارسال فرمایید:",
+            "کاربری با مشخصات ارسالی یافت نشدnلطفا دوباره ارسال فرمایید:",
             reply_markup=back_button()
         )
         return
@@ -226,15 +226,15 @@ def channel_search_result_text(channels, page):
     per_page = 10
     start = page * per_page
     chunk = channels[start:start+per_page]
-    txt = f"{len(channels)} کانال یافت شد:\n\n"
+    txt = f"{len(channels)} کانال یافت شد:nn"
     for i, ch in enumerate(chunk, start+1):
         title = ch["title"] or "بدون نام"
         username = f"@{ch['username']}" if ch["username"] else "ندارد"
         cid = ch["chat_id"]
         txt += (
-            f"{i}. نام کانال: {title}\n"
-            f"🆔 یوزرنیم : {username}\n"
-            f"🔰 شناسه عددی : {cid}\n\n"
+            f"{i}. نام کانال: {title}n"
+            f"🆔 یوزرنیم : {username}n"
+            f"🔰 شناسه عددی : {cid}nn"
         )
     return txt, chunk
 
@@ -273,7 +273,7 @@ async def handle_bc_channel_search(update, context, text):
             ).fetchall()
     if not channels:
         await update.message.reply_text(
-            "کانالی با مشخصات ارسالی یافت نشد\nلطفا دوباره ارسال فرمایید:",
+            "کانالی با مشخصات ارسالی یافت نشدnلطفا دوباره ارسال فرمایید:",
             reply_markup=back_button()
         )
         return
@@ -299,7 +299,7 @@ async def bc_user_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     await context.bot.send_message(
         q.from_user.id,
-        f"شما در حال ارسال پیام به {name} هستید\nلطفا متن پیام خود را وارد فرمایید :",
+        f"شما در حال ارسال پیام به {name} هستیدnلطفا متن پیام خود را وارد فرمایید :",
         reply_markup=back_button()
     )
 
@@ -315,9 +315,198 @@ async def bc_channel_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     await context.bot.send_message(
         q.from_user.id,
-        f"شما در حال ارسال پیام در کانال هستید\nلطفا متن پیام خود را وارد فرمایید :",
+        f"شما در حال ارسال پیام در کانال هستیدnلطفا متن پیام خود را وارد فرمایید :",
         reply_markup=back_button()
     )
+
+# ==================== نتیجه ارسال در کانال ====================
+def bc_channel_result_text(items, page):
+    per_page = 10
+    start = page * per_page
+    chunk = items[start:start + per_page]
+
+    txt = f"{len(items)} کانال یافت شد:nn"
+
+    for i, ch in enumerate(chunk, start + 1):
+        title = ch.get("title") or "بدون نام"
+        username = f"@{ch['username']}" if ch.get("username") else "ندارد"
+        chat_id = ch["chat_id"]
+
+        txt += (
+            f"{i}. نام کانال: {title}n"
+            f"🆔 یوزرنیم : {username}n"
+            f"🔰 شناسه عددی : {chat_id}nn"
+        )
+
+    return txt
+
+
+def bc_channel_result_kb(items, page, result_type):
+    per_page = 10
+    total_pages = max(1, math.ceil(len(items) / per_page))
+
+    rows = []
+
+    if total_pages > 1:
+        nav = []
+
+        if page > 0:
+            nav.append(("⬅️ قبلی", f"bc_channel_result_page:{result_type}:{page - 1}"))
+
+        if page < total_pages - 1:
+            nav.append(("بعدی ➡️", f"bc_channel_result_page:{result_type}:{page + 1}"))
+
+        rows.append(nav)
+
+    rows.append([
+        ("🔙 بازگشت به نتیجه ارسال", "bc_channel_result_back")
+    ])
+
+    return rows
+
+
+async def bc_channel_result_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    user_id = q.from_user.id
+
+    from bot_manager import get_user_state
+
+    state, data = get_user_state(user_id)
+
+    if state != "bc_channel_result":
+        await q.answer("نتیجه ارسال دیگر در دسترس نیست.", show_alert=True)
+        return
+
+    await q.answer()
+
+    result_type = q.data.split(":")[1]
+
+    if result_type == "success":
+        items = data.get("success", [])
+    else:
+        items = data.get("failed", [])
+
+    if not items:
+        title = (
+            "کانال/گروه موفقی وجود ندارد."
+            if result_type == "success"
+            else "کانال/گروه ناموفقی وجود ندارد."
+        )
+
+        await q.message.edit_text(
+            title,
+            reply_markup=inline([
+                [("🔙 بازگشت به نتیجه ارسال", "bc_channel_result_back")]
+            ])
+        )
+        return
+
+    txt = bc_channel_result_text(items, 0)
+    kb = bc_channel_result_kb(items, 0, result_type)
+
+    await q.message.edit_text(
+        txt,
+        reply_markup=inline(kb)
+    )
+
+
+async def bc_channel_result_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    user_id = q.from_user.id
+
+    from bot_manager import get_user_state
+
+    state, data = get_user_state(user_id)
+
+    if state != "bc_channel_result":
+        await q.answer("نتیجه ارسال دیگر در دسترس نیست.", show_alert=True)
+        return
+
+    await q.answer()
+
+    parts = q.data.split(":")
+    result_type = parts[1]
+    page = int(parts[2])
+
+    if result_type == "success":
+        items = data.get("success", [])
+    else:
+        items = data.get("failed", [])
+
+    total_pages = max(1, math.ceil(len(items) / 10))
+
+    if page < 0 or page >= total_pages:
+        return
+
+    txt = bc_channel_result_text(items, page)
+    kb = bc_channel_result_kb(items, page, result_type)
+
+    try:
+        await q.message.edit_text(
+            txt,
+            reply_markup=inline(kb)
+        )
+    except Exception:
+        pass
+
+
+async def bc_channel_result_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+
+    user_id = q.from_user.id
+
+    from bot_manager import get_user_state
+
+    state, data = get_user_state(user_id)
+
+    if state != "bc_channel_result":
+        return
+
+    text = (
+        "پیام شما ارسال شد.nn"
+        f"🔍 تعداد کانال/گروه‌های شناسایی‌شده: {data.get('total', 0)}nn"
+        f"✔️ موفق: {data.get('sent', 0)}n"
+        f"❌ ناموفق: {data.get('failed_count', 0)}"
+    )
+
+    await q.message.edit_text(
+        text,
+        reply_markup=inline([
+            [
+                ("✅ مشاهده کانال/گروه‌های موفق", "bc_channel_result:success"),
+            ],
+            [
+                ("❌ مشاهده کانال/گروه‌های ناموفق", "bc_channel_result:failed"),
+            ],
+            [
+                ("🔙 بازگشت به پنل مدیریت", "bc_channel_result_panel"),
+            ],
+        ])
+    )
+
+
+async def bc_channel_result_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+
+    user_id = q.from_user.id
+
+    from bot_manager import set_user_state
+
+    set_user_state(user_id, "none")
+
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+
+    await context.bot.send_message(
+        user_id,
+        "👑 پنل مدیریت",
+        reply_markup=admin_panel()
+    )
+
 
 # ==================== تأیید ارسال ====================
 async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -369,29 +558,72 @@ async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mode == "channel_all":
         with db.conn() as c:
             chs = c.execute(
-                "SELECT chat_id, title FROM bot_chats"
+                "SELECT chat_id, title, username FROM bot_chats"
             ).fetchall()
-        
-        await context.bot.send_message(
-            user_id,
-            f"🔍 تعداد کانال/گروه‌های شناسایی‌شده: {len(chs)}"
-        )
-        
+
+        successful_channels = []
+        failed_channels = []
+
         for ch in chs:
             cid = ch["chat_id"]
+
+            channel_info = {
+                "chat_id": cid,
+                "title": ch["title"] or "بدون نام",
+                "username": ch["username"] or "",
+            }
+
             try:
-                await context.bot.send_message(cid, text, parse_mode="HTML")
+                await context.bot.send_message(
+                    cid,
+                    text,
+                    parse_mode="HTML"
+                )
+
                 sent += 1
-                await context.bot.send_message(
-                    user_id,
-                    f"✅ {ch['title']}"
-                )
-            except Exception as e:
+                successful_channels.append(channel_info)
+
+            except Exception:
                 failed += 1
-                await context.bot.send_message(
-                    user_id,
-                    f"❌ {ch['title']} (ID: {cid}): {e}"
-                )
+                failed_channels.append(channel_info)
+
+        set_user_state(
+            user_id,
+            "bc_channel_result",
+            {
+                "total": len(chs),
+                "sent": sent,
+                "failed_count": failed,
+                "success": successful_channels,
+                "failed": failed_channels,
+            }
+        )
+
+        result_text = (
+            "پیام شما ارسال شد.nn"
+            f"🔍 تعداد کانال/گروه‌های شناسایی‌شده: {len(chs)}nn"
+            f"✔️ موفق: {sent}n"
+            f"❌ ناموفق: {failed}"
+        )
+
+        await context.bot.send_message(
+            user_id,
+            result_text,
+            reply_markup=inline([
+                [
+                    ("✅ مشاهده کانال/گروه‌های موفق", "bc_channel_result:success"),
+                ],
+                [
+                    ("❌ مشاهده کانال/گروه‌های ناموفق", "bc_channel_result:failed"),
+                ],
+                [
+                    ("🔙 بازگشت به پنل مدیریت", "bc_channel_result_panel"),
+                ],
+            ])
+        )
+
+        return
+
     elif mode == "specific_channel":
         if target_id:
             try:
@@ -411,7 +643,7 @@ async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_user_state(user_id, "none")
     await context.bot.send_message(
         user_id,
-        f"✅ ارسال شد.\n✔️ موفق: {sent}\n❌ ناموفق: {failed}",
+        f"✅ ارسال شد.n✔️ موفق: {sent}n❌ ناموفق: {failed}",
         reply_markup=admin_panel()
     )
 
@@ -439,7 +671,7 @@ async def admins_list_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     admins = list_admins()
-    text = "📜 لیست مدیران:\n\n" + "\n".join(f"• <a href='tg://user?id={a}'>{a}</a>" for a in admins)
+    text = "📜 لیست مدیران:nn" + "n".join(f"• <a href='tg://user?id={a}'>{a}</a>" for a in admins)
     await q.message.reply_text(text, parse_mode="HTML")
 
 # ==================== آیدی‌یاب ====================
@@ -515,7 +747,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 try:
                     await context.bot.send_message(
                         target,
-                        f"⚠️ شما یک اخطار دریافت کردید.\nتعداد اخطار: {new_count} از {Config.MAX_WARNINGS}"
+                        f"⚠️ شما یک اخطار دریافت کردید.nتعداد اخطار: {new_count} از {Config.MAX_WARNINGS}"
                     )
                 except Exception:
                     pass
@@ -570,6 +802,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return True
     if data == "bc_confirm_no":
         await bc_cancel(update, context)
+        return True
+    if data.startswith("bc_channel_result:"):
+        await bc_channel_result_view(update, context)
+        return True
+    if data.startswith("bc_channel_result_page:"):
+        await bc_channel_result_page(update, context)
+        return True
+    if data == "bc_channel_result_back":
+        await bc_channel_result_back(update, context)
+        return True
+    if data == "bc_channel_result_panel":
+        await bc_channel_result_panel(update, context)
         return True
     if data.startswith("bc_user_pick:"):
         await bc_user_pick(update, context)
