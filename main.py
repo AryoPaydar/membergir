@@ -11,7 +11,6 @@ from bot_manager import (
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
     panel, orders_history, top, admin_shop, admin_texts, history,
-    admin_broadcast,
 )
 from utils.keyboards import main_menu
 
@@ -64,7 +63,7 @@ async def on_message(update: Update, context):
     
     # ۲. State ادمین
     if is_admin(user_tg.id):
-        for module in (admin, admin_shop, admin_texts, admin_broadcast):
+        for module in (admin, admin_shop, admin_texts):
             if hasattr(module, "handle_state"):
                 if await module.handle_state(update, context):
                     return
@@ -105,7 +104,6 @@ async def on_callback(update: Update, context):
         ads,
         user,
         admin,
-        admin_broadcast,
         transfer,
         referral,
         gift,
