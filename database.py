@@ -171,6 +171,17 @@ class Database:
                 )
             """)
             
+            # === کانال‌ها و گروه‌های ربات ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS bot_chats (
+                    chat_id     INTEGER PRIMARY KEY,
+                    chat_type   TEXT,
+                    title       TEXT,
+                    username    TEXT,
+                    added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # === ایندکس‌ها ===
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_admin ON orders(admin_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
