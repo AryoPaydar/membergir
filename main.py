@@ -1,7 +1,8 @@
 import logging
 from telegram import Update
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+    Application, CommandHandler, MessageHandler, CallbackQueryHandler,
+    ChatMemberHandler, filters
 )
 from config import Config
 from database import db
@@ -11,6 +12,7 @@ from bot_manager import (
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
     panel, orders_history, top, admin_shop, admin_texts, history,
+    chat_tracker,
 )
 from utils.keyboards import main_menu
 
@@ -99,7 +101,6 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
     
-    # 👇 ترتیب مهم: ads اول، بعد user، بعد ادمین‌ها
     modules = [
         ads,
         user,
@@ -123,7 +124,6 @@ async def on_callback(update: Update, context):
             except Exception as e:
                 logger.exception(f"Callback error in {module.__name__}: {e}")
     
-    # اگه هیچ ماژولی هندل نکرد، callback رو ببند
     try:
         await q.answer()
     except Exception:
@@ -141,6 +141,9 @@ def main():
     app.add_handler(CommandHandler("start", user.start))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app.add_handler(CallbackQueryHandler(on_callback))
+    app.add_handler(
+        ChatMemberHandler(chat_tracker.track_chat, ChatMemberHandler.MY_CHAT_MEMBER)
+    )
     app.add_error_handler(on_error)
     
     logger.info("Bot is running.")
