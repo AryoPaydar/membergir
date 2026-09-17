@@ -12,15 +12,10 @@ from bot_manager import (
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
     panel, orders_history, top, admin_shop, admin_texts, history,
-    chat_tracker,
 )
-from utils.keyboards import main_menu
+from handlers import chat_tracker   # 👈 مستقیم از handlers، نه از __init__
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+from utils.keyboards import main_menu
 
 # ==================== دکمه‌های منو ====================
 USER_BUTTONS = {
