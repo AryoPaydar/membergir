@@ -8,7 +8,6 @@ from bot_manager import (
 )
 from utils.keyboards import admin_panel, main_menu, back_button, inline
 from utils.helpers import is_positive_int, is_valid_username, format_number, now_ts
-from handlers import admin_shop, admin_texts
 from database import db
 from datetime import datetime
 import math
@@ -644,24 +643,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return False
 
 # ==================== روتر متن (دکمه‌ها) ====================
-ADMIN_BUTTONS = {
-    "📈 آمار ربات": stats,
-    "📨 ارسال پیام": broadcast_start,
-    "👤 ادمین‌ها": admins_menu,
-    "🆔 آیدی‌یاب": id_finder,
-    "⚠️ اخطاردهی": warn_user,
-    "🔕 خاموش/روشن": power_menu,
-    "🔙 بازگشت به منو": back_to_main,
-    "🛍 مدیریت فروشگاه": admin_shop.shop_admin_menu,
-    "📇 تنظیم متن‌ها": admin_texts.texts_menu,
-}
-
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    # 👇 Lazy import برای جلوگیری از circular import
+    from handlers import admin_shop, admin_texts
+    
     text = (update.message.text or "").strip()
     if text == "👑 پنل مدیریت":
         await admin_panel_handler(update, context)
         return True
-    if is_admin(update.effective_user.id) and text in ADMIN_BUTTONS:
+    
+    if not is_admin(update.effective_user.id):
+        return False
+    
+    ADMIN_BUTTONS = {
+        "📈 آمار ربات": stats,
+        "📨 ارسال پیام": broadcast_start,
+        "👤 ادمین‌ها": admins_menu,
+        "🆔 آیدی‌یاب": id_finder,
+        "⚠️ اخطاردهی": warn_user,
+        "🔕 خاموش/روشن": power_menu,
+        "🔙 بازگشت به منو": back_to_main,
+        "🛍 مدیریت فروشگاه": admin_shop.shop_admin_menu,
+        "📇 تنظیم متن‌ها": admin_texts.texts_menu,
+    }
+    
+    if text in ADMIN_BUTTONS:
         await ADMIN_BUTTONS[text](update, context)
         return True
     return False
