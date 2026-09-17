@@ -369,32 +369,57 @@ async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mode == "channel_all":
         with db.conn() as c:
             chs = c.execute(
-                "SELECT DISTINCT channel, channel_id FROM orders WHERE status IN ('running','completed') AND channel_id IS NOT NULL"
+                "SELECT DISTINCT channel_id, channel FROM orders WHERE channel_id IS NOT NULL"
             ).fetchall()
+        
+        # لاگ دیباگ
+        await context.bot.send_message(
+            user_id,
+            f"🔍 تعداد کانال‌های پیدا شده: {len(chs)}"
+        )
+        
+        bot_id = context.bot.id
+        
         for ch in chs:
-            success = False
-            # اول با channel_id (عددی) امتحان کن
-            if ch["channel_id"]:
-                try:
-                    await context.bot.send_message(ch["channel_id"], text, parse_mode="HTML")
-                    sent += 1
-                    success = True
-                except Exception:
-                    pass
-            # اگه نشد، با @channel امتحان کن
-            if not success and ch["channel"]:
-                try:
-                    await context.bot.send_message(f"@{ch['channel']}", text, parse_mode="HTML")
-                    sent += 1
-                    success = True
-                except Exception:
-                    pass
-            if not success:
+            cid = ch["channel_id"]
+            if not cid:
+                continue
+            
+            # چک کن ربات ادمینه
+            try:
+                member = await context.bot.get_chat_member(cid, bot_id)
+                if member.status not in ("administrator", "creator"):
+                    failed += 1
+                    await context.bot.send_message(
+                        user_id,
+                        f"❌ ربات در کانال {ch['channel']} ادمین نیست (status: {member.status})"
+                    )
+                    continue
+            except Exception as e:
                 failed += 1
+                await context.bot.send_message(
+                    user_id,
+                    f"❌ خطا در چک کانال {ch['channel']} (ID: {cid}): {e}"
+                )
+                continue
+            
+            # ارسال
+            try:
+                await context.bot.send_message(cid, text, parse_mode="HTML")
+                sent += 1
+                await context.bot.send_message(
+                    user_id,
+                    f"✅ ارسال موفق به {ch['channel']}"
+                )
+            except Exception as e:
+                failed += 1
+                await context.bot.send_message(
+                    user_id,
+                    f"❌ خطا در ارسال به {ch['channel']}: {e}"
+                )
     elif mode == "specific_channel":
         if target_id:
             success = False
-            # اگه target_id عددی بود، مستقیم استفاده کن
             if str(target_id).lstrip("-").isdigit():
                 try:
                     await context.bot.send_message(int(target_id), text, parse_mode="HTML")
@@ -402,7 +427,6 @@ async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     success = True
                 except Exception as e:
                     await context.bot.send_message(user_id, f"❌ خطای ارسال با ID: {e}")
-            # اگه @ داشت، از @ استفاده کن
             if not success:
                 try:
                     target_str = str(target_id)
@@ -497,7 +521,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     msg = update.message
     text = (msg.text or "").strip()
 
-    # === دکمه بازگشت ===
     if text in ("🔙 بازگشت", "🔙 بازگشت به پنل مدیریت", "بازگشت به پنل مدیریت"):
         set_user_state(user.id, "none")
         await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
