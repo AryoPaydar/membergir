@@ -229,11 +229,12 @@ def channel_search_result_text(channels, page):
     chunk = channels[start:start+per_page]
     txt = f"{len(channels)} کانال یافت شد:\n\n"
     for i, ch in enumerate(chunk, start+1):
-        uname = ch["channel"]
-        cid = ch["channel_id"] or "نامشخص"
+        title = ch["title"] or "بدون نام"
+        username = f"@{ch['username']}" if ch["username"] else "ندارد"
+        cid = ch["chat_id"]
         txt += (
-            f"{i}. نام کانال: @{uname}\n"
-            f"🆔 یوزرنیم : @{uname}\n"
+            f"{i}. نام کانال: {title}\n"
+            f"🆔 یوزرنیم : {username}\n"
             f"🔰 شناسه عددی : {cid}\n\n"
         )
     return txt, chunk
@@ -245,9 +246,9 @@ def channel_search_kb(channels, page):
     chunk = channels[start:start+per_page]
     rows = []
     for ch in chunk:
-        uname = (ch["channel"] or "")[:20]
-        cid = ch["channel_id"] or ch["channel"]
-        rows.append([(f"📤 ارسال به @{uname}", f"bc_channel_pick:{cid}")])
+        title = (ch["title"] or "کانال")[:20]
+        cid = ch["chat_id"]
+        rows.append([(f"📤 ارسال به {title}", f"bc_channel_pick:{cid}")])
     if total_pages > 1:
         nav = []
         if page > 0:
@@ -261,15 +262,15 @@ def channel_search_kb(channels, page):
 async def handle_bc_channel_search(update, context, text):
     qc = text.strip().lstrip("@")
     with db.conn() as c:
-        if qc.isdigit() or qc.startswith("-"):
+        if qc.lstrip("-").isdigit():
             channels = c.execute(
-                "SELECT DISTINCT channel, channel_id FROM orders WHERE channel_id = ? LIMIT 50",
-                (qc,)
+                "SELECT chat_id, title, username FROM bot_chats WHERE chat_id = ? LIMIT 50",
+                (int(qc),)
             ).fetchall()
         else:
             channels = c.execute(
-                "SELECT DISTINCT channel, channel_id FROM orders WHERE channel LIKE ? LIMIT 50",
-                (f"%{qc}%",)
+                "SELECT chat_id, title, username FROM bot_chats WHERE title LIKE ? OR username LIKE ? LIMIT 50",
+                (f"%{qc}%", f"%{qc}%")
             ).fetchall()
     if not channels:
         await update.message.reply_text(
@@ -369,75 +370,37 @@ async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mode == "channel_all":
         with db.conn() as c:
             chs = c.execute(
-                "SELECT DISTINCT channel_id, channel FROM orders WHERE channel_id IS NOT NULL"
+                "SELECT chat_id, title FROM bot_chats"
             ).fetchall()
         
-        # لاگ دیباگ
         await context.bot.send_message(
             user_id,
-            f"🔍 تعداد کانال‌های پیدا شده: {len(chs)}"
+            f"🔍 تعداد کانال/گروه‌های شناسایی‌شده: {len(chs)}"
         )
         
-        bot_id = context.bot.id
-        
         for ch in chs:
-            cid = ch["channel_id"]
-            if not cid:
-                continue
-            
-            # چک کن ربات ادمینه
-            try:
-                member = await context.bot.get_chat_member(cid, bot_id)
-                if member.status not in ("administrator", "creator"):
-                    failed += 1
-                    await context.bot.send_message(
-                        user_id,
-                        f"❌ ربات در کانال {ch['channel']} ادمین نیست (status: {member.status})"
-                    )
-                    continue
-            except Exception as e:
-                failed += 1
-                await context.bot.send_message(
-                    user_id,
-                    f"❌ خطا در چک کانال {ch['channel']} (ID: {cid}): {e}"
-                )
-                continue
-            
-            # ارسال
+            cid = ch["chat_id"]
             try:
                 await context.bot.send_message(cid, text, parse_mode="HTML")
                 sent += 1
                 await context.bot.send_message(
                     user_id,
-                    f"✅ ارسال موفق به {ch['channel']}"
+                    f"✅ {ch['title']}"
                 )
             except Exception as e:
                 failed += 1
                 await context.bot.send_message(
                     user_id,
-                    f"❌ خطا در ارسال به {ch['channel']}: {e}"
+                    f"❌ {ch['title']} (ID: {cid}): {e}"
                 )
     elif mode == "specific_channel":
         if target_id:
-            success = False
-            if str(target_id).lstrip("-").isdigit():
-                try:
-                    await context.bot.send_message(int(target_id), text, parse_mode="HTML")
-                    sent += 1
-                    success = True
-                except Exception as e:
-                    await context.bot.send_message(user_id, f"❌ خطای ارسال با ID: {e}")
-            if not success:
-                try:
-                    target_str = str(target_id)
-                    if not target_str.startswith("@") and not target_str.lstrip("-").isdigit():
-                        target_str = f"@{target_str}"
-                    await context.bot.send_message(target_str, text, parse_mode="HTML")
-                    sent += 1
-                    success = True
-                except Exception as e:
-                    failed += 1
-                    await context.bot.send_message(user_id, f"❌ خطا: {e}")
+            try:
+                await context.bot.send_message(int(target_id), text, parse_mode="HTML")
+                sent += 1
+            except Exception as e:
+                failed += 1
+                await context.bot.send_message(user_id, f"❌ خطا: {e}")
     elif mode == "specific_user":
         if target_id:
             try:
@@ -645,15 +608,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return True
         qc = query.strip().lstrip("@")
         with db.conn() as c:
-            if qc.isdigit() or qc.startswith("-"):
+            if qc.lstrip("-").isdigit():
                 channels = c.execute(
-                    "SELECT DISTINCT channel, channel_id FROM orders WHERE channel_id = ? LIMIT 50",
-                    (qc,)
+                    "SELECT chat_id, title, username FROM bot_chats WHERE chat_id = ? LIMIT 50",
+                    (int(qc),)
                 ).fetchall()
             else:
                 channels = c.execute(
-                    "SELECT DISTINCT channel, channel_id FROM orders WHERE channel LIKE ? LIMIT 50",
-                    (f"%{qc}%",)
+                    "SELECT chat_id, title, username FROM bot_chats WHERE title LIKE ? OR username LIKE ? LIMIT 50",
+                    (f"%{qc}%", f"%{qc}%")
                 ).fetchall()
         if not channels:
             return True
