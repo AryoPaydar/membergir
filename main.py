@@ -10,7 +10,8 @@ from bot_manager import (
 )
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
-    panel, orders_history, top, admin_shop, admin_texts, history
+    panel, orders_history, top, admin_shop, admin_texts, history,
+    admin_broadcast,
 )
 from utils.keyboards import main_menu
 
@@ -39,6 +40,7 @@ ADMIN_BUTTONS = {
     "📇 تنظیم متن‌ها": admin_texts.texts_menu,
 }
 
+
 async def on_message(update: Update, context):
     user_tg = update.effective_user
     msg = update.message
@@ -54,7 +56,7 @@ async def on_message(update: Update, context):
     if not get_user(user_tg.id):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
     
-    # ۱. State کاربر — ads اول از همه چون state های سفارش باید سریع هندل بشن
+    # ۱. State کاربر
     for module in (ads, transfer, referral, gift, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             if await module.handle_state(update, context):
@@ -62,7 +64,7 @@ async def on_message(update: Update, context):
     
     # ۲. State ادمین
     if is_admin(user_tg.id):
-        for module in (admin, admin_shop, admin_texts):
+        for module in (admin, admin_shop, admin_texts, admin_broadcast):
             if hasattr(module, "handle_state"):
                 if await module.handle_state(update, context):
                     return
@@ -86,6 +88,7 @@ async def on_message(update: Update, context):
         reply_markup=main_menu(is_admin(user_tg.id))
     )
 
+
 async def on_callback(update: Update, context):
     q = update.callback_query
     
@@ -97,11 +100,12 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
     
-    # 👇 ترتیب مهم: ads اول، چون callback های claim_coin, order_pick, order_confirm و report رو هندل می‌کنه
+    # 👇 ترتیب مهم: ads اول، بعد user، بعد ادمین‌ها
     modules = [
-        ads,           # 👈 اول از همه — مهم برای toast سکه دریافتی
+        ads,
         user,
         admin,
+        admin_broadcast,
         transfer,
         referral,
         gift,
@@ -127,18 +131,23 @@ async def on_callback(update: Update, context):
     except Exception:
         pass
 
+
 async def on_error(update: object, context):
     logger.error(f"Exception: {context.error}", exc_info=context.error)
+
 
 def main():
     logger.info("Starting bot...")
     app = Application.builder().token(Config.BOT_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", user.start))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_error_handler(on_error)
+    
     logger.info("Bot is running.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
