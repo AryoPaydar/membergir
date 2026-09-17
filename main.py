@@ -13,9 +13,13 @@ from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
     panel, orders_history, top, admin_shop, admin_texts, history,
 )
-from handlers import chat_tracker   # 👈 مستقیم از handlers، نه از __init__
-
 from utils.keyboards import main_menu
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # ==================== دکمه‌های منو ====================
 USER_BUTTONS = {
@@ -35,6 +39,36 @@ ADMIN_BUTTONS = {
     "🛍 مدیریت فروشگاه": admin_shop.shop_admin_menu,
     "📇 تنظیم متن‌ها": admin_texts.texts_menu,
 }
+
+
+# ==================== ردیاب کانال/گروه ====================
+async def track_chat(update: Update, context):
+    """وقتی ربات به کانال/گروهی اضافه یا حذف میشه"""
+    my_chat_member = update.my_chat_member
+    if not my_chat_member:
+        return
+    
+    chat = my_chat_member.chat
+    new_status = my_chat_member.new_chat_member.status
+    
+    # اگه ربات ادمین یا عضو شد
+    if new_status in ("administrator", "member", "creator"):
+        with db.conn() as c:
+            c.execute("""
+                INSERT INTO bot_chats (chat_id, chat_type, title, username)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(chat_id) DO UPDATE SET
+                    chat_type = excluded.chat_type,
+                    title = excluded.title,
+                    username = excluded.username
+            """, (chat.id, chat.type, chat.title or "", chat.username or ""))
+        print(f"✅ ربات به {chat.type} {chat.title} (ID: {chat.id}) اضافه شد")
+    
+    # اگه ربات حذف شد
+    elif new_status in ("left", "kicked"):
+        with db.conn() as c:
+            c.execute("DELETE FROM bot_chats WHERE chat_id = ?", (chat.id,))
+        print(f"❌ ربات از {chat.type} {chat.title} (ID: {chat.id}) حذف شد")
 
 
 async def on_message(update: Update, context):
@@ -137,7 +171,7 @@ def main():
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(
-        ChatMemberHandler(chat_tracker.track_chat, ChatMemberHandler.MY_CHAT_MEMBER)
+        ChatMemberHandler(track_chat, ChatMemberHandler.MY_CHAT_MEMBER)
     )
     app.add_error_handler(on_error)
     
