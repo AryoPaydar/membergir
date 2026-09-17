@@ -35,19 +35,34 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
+    
     with db.conn() as c:
+        # کاربران
         total = c.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
         banned = c.execute("SELECT COUNT(*) c FROM users WHERE banned=1").fetchone()["c"]
+        warned = c.execute("SELECT COUNT(*) c FROM users WHERE warnings > 0").fetchone()["c"]
+        
+        # سفارشات
         orders = c.execute("SELECT COUNT(*) c FROM orders").fetchone()["c"]
         running = c.execute("SELECT COUNT(*) c FROM orders WHERE status='running'").fetchone()["c"]
+        
+        # کانال‌ها و گروه‌ها
+        channels = c.execute(
+            "SELECT COUNT(*) c FROM bot_chats WHERE chat_type = 'channel'"
+        ).fetchone()["c"]
+        groups = c.execute(
+            "SELECT COUNT(*) c FROM bot_chats WHERE chat_type IN ('group', 'supergroup')"
+        ).fetchone()["c"]
     
     text = (
         f"📈 <b>آمار ربات</b>\n\n"
+        f"کل کانال ها : {channels:,}\n"
+        f"کل گروه ها : {groups:,}\n"
         f"👥 کل کاربران: {total:,}\n"
-        f"⛔️ بن‌شده: {banned:,}\n"
+        f"⛔️ کاربران بن‌شده: {banned:,}\n"
+        f"کاربران دارای اخطار : {warned:,}\n"
         f"📌 کل سفارشات: {orders:,}\n"
-        f"🔄 در حال اجرا: {running:,}\n"
-        f"💰 موجودی فروشگاه: {format_number(get_setting('shop_balance', '0'))} ریال"
+        f"🔄 سفارشات در حال اجرا: {running:,}"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
