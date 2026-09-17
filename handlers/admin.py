@@ -216,6 +216,8 @@ async def handle_bc_user_search(update, context, text):
             reply_markup=back_button()
         )
         return
+    from bot_manager import set_user_state
+    set_user_state(update.effective_user.id, "bc_search_user", {"last_query": text})
     txt, _ = user_search_result_text(users, 0)
     kb = user_search_kb(users, 0)
     await update.message.reply_text(txt, reply_markup=inline(kb))
@@ -275,6 +277,8 @@ async def handle_bc_channel_search(update, context, text):
             reply_markup=back_button()
         )
         return
+    from bot_manager import set_user_state
+    set_user_state(update.effective_user.id, "bc_search_channel", {"last_query": text})
     txt, _ = channel_search_result_text(channels, 0)
     kb = channel_search_kb(channels, 0)
     await update.message.reply_text(txt, reply_markup=inline(kb))
@@ -463,10 +467,13 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         return False
     msg = update.message
     text = (msg.text or "").strip()
-    if text == "🔙 بازگشت به پنل مدیریت":
+
+    # === دکمه بازگشت ===
+    if text in ("🔙 بازگشت", "🔙 بازگشت به پنل مدیریت", "بازگشت به پنل مدیریت"):
         set_user_state(user.id, "none")
         await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
+
     if state == "admin_search_id":
         if text == "🔙 بازگشت":
             set_user_state(user.id, "none")
@@ -559,8 +566,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data.startswith("bc_user_page:"):
         await q.answer()
         page = int(data.split(":")[1])
-        # برای صفحه‌بندی، state جستجو حفظ میشه و از دیتابیس دوباره می‌خونیم
-        # چون لیست ذخیره نشده، این ساده‌ترین راهه
         from bot_manager import get_user_state
         state, sdata = get_user_state(user.id)
         query = sdata.get("last_query", "")
