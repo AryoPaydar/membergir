@@ -9,6 +9,9 @@ from bot_manager import (
 from utils.keyboards import admin_panel, main_menu, back_button, inline
 from utils.helpers import is_positive_int, is_valid_username, format_number, now_ts
 from handlers import admin_shop, admin_texts
+from database import db
+from datetime import datetime
+import math
 
 async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -32,7 +35,7 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
-    with __import__("database").db.conn() as c:
+    with db.conn() as c:
         total = c.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
         banned = c.execute("SELECT COUNT(*) c FROM users WHERE banned=1").fetchone()["c"]
         orders = c.execute("SELECT COUNT(*) c FROM orders").fetchone()["c"]
@@ -48,49 +51,361 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
-# ==================== ارسال پیام همگانی ====================
+# ==================== ارسال پیام ====================
 async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
     await update.message.reply_text(
         "📨 نوع ارسال را انتخاب کنید:",
         reply_markup=inline([
-            [("📝 پیام همگانی", "bc_text"), ("🔁 فوروارد همگانی", "bc_fwd")],
-            [("👤 پیام به یک کاربر", "bc_one")],
+            [("📤 ارسال در ربات", "bc_to_bot"), ("📢 ارسال در کانال", "bc_to_channel")],
+            [("👤 ارسال به کاربر خاص", "bc_to_user"), ("📌 ارسال در کانال خاص", "bc_to_specific_channel")],
+            [("🔙 بازگشت به پنل مدیریت", "bc_back_panel")],
         ])
     )
 
-async def broadcast_run(update: Update, context: ContextTypes.DEFAULT_TYPE, fwd: bool = False):
-    if not is_admin(update.effective_user.id):
-        return
+async def bc_back_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
     from bot_manager import set_user_state
-    set_user_state(update.effective_user.id, "broadcast_fwd" if fwd else "broadcast_text")
-    await update.message.reply_text("📌 پیام خود را ارسال کنید.", reply_markup=back_button())
+    set_user_state(q.from_user.id, "none")
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(q.from_user.id, "👑 پنل مدیریت", reply_markup=admin_panel())
 
-async def do_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE, fwd: bool):
-    """ارسال همگانی"""
-    from database import db
+# === ارسال در ربات ===
+async def bc_to_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    await q.message.edit_text(
+        "به چه کسانی می‌خواهید پیام ارسال کنید؟",
+        reply_markup=inline([
+            [("👥 همه کاربران", "bc_bot:all:0")],
+            [("🟢 کاربران فعال در 3 روز گذشته", "bc_bot:active3:0")],
+            [("🔴 کاربران غیرفعال در 3 روز گذشته", "bc_bot:inactive3:0")],
+            [("🔴 کاربران غیرفعال در 7 روز گذشته", "bc_bot:inactive7:0")],
+            [("🔙 بازگشت به پنل مدیریت", "bc_back_panel")],
+        ])
+    )
+
+async def bc_bot_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    _, target, _ = q.data.split(":")
     from bot_manager import set_user_state
-    msg = update.message
+    set_user_state(user_id, "bc_text", {"mode": "bot", "target": target})
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        user_id,
+        "لطفا متن پیام خود را وارد فرمایید :",
+        reply_markup=back_button()
+    )
+
+# === ارسال در کانال ===
+async def bc_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    from bot_manager import set_user_state
+    set_user_state(user_id, "bc_text", {"mode": "channel_all"})
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        user_id,
+        "لطفا متن پیام خود را وارد فرمایید :",
+        reply_markup=back_button()
+    )
+
+# === ارسال به کاربر خاص ===
+async def bc_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    from bot_manager import set_user_state
+    set_user_state(user_id, "bc_search_user")
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        user_id,
+        "نام کاربری، یوزرنیم یا شناسه کاربری فرد مورد نظر را ارسال فرمایید:",
+        reply_markup=back_button()
+    )
+
+# === ارسال در کانال خاص ===
+async def bc_to_specific_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    from bot_manager import set_user_state
+    set_user_state(user_id, "bc_search_channel")
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        user_id,
+        "نام کانال، ایدی کانال یا شناسه عددی کانال مورد نظر را ارسال فرمایید:",
+        reply_markup=back_button()
+    )
+
+# ==================== جستجوی کاربر ====================
+def user_search_result_text(users, page):
+    per_page = 10
+    start = page * per_page
+    chunk = users[start:start+per_page]
+    txt = f"{len(users)} کاربر یافت شد:\n\n"
+    for i, u in enumerate(chunk, start+1):
+        name = u["first_name"] or "کاربر"
+        username = f"@{u['username']}" if u["username"] else "ندارد"
+        txt += (
+            f"{i}. نام کاربری : {name}\n"
+            f"🆔 یوزرنیم : {username}\n"
+            f"🔰 شماره کاربری : {u['user_id']}\n\n"
+        )
+    return txt, chunk
+
+def user_search_kb(users, page):
+    per_page = 10
+    total_pages = math.ceil(len(users) / per_page)
+    start = page * per_page
+    chunk = users[start:start+per_page]
+    rows = []
+    for u in chunk:
+        name = (u["first_name"] or "کاربر")[:20]
+        rows.append([(f"📤 ارسال به {name}", f"bc_user_pick:{u['user_id']}")])
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(("⬅️ قبلی", f"bc_user_page:{page-1}"))
+        if page < total_pages - 1:
+            nav.append(("بعدی ➡️", f"bc_user_page:{page+1}"))
+        rows.append(nav)
+    rows.append([("🔙 بازگشت به پنل مدیریت", "bc_back_panel")])
+    return rows
+
+async def do_user_search(update, query):
+    query_clean = query.strip().lstrip("@")
     with db.conn() as c:
-        rows = c.execute("SELECT user_id FROM users WHERE banned = 0").fetchall()
-    
-    sent = failed = 0
-    for r in rows:
-        try:
-            if fwd:
-                await msg.forward(r["user_id"])
+        if query_clean.isdigit():
+            users = c.execute(
+                "SELECT user_id, first_name, username FROM users WHERE user_id = ?",
+                (int(query_clean),)
+            ).fetchall()
+        else:
+            users = c.execute(
+                "SELECT user_id, first_name, username FROM users WHERE username LIKE ? OR first_name LIKE ?",
+                (f"%{query_clean}%", f"%{query}%")
+            ).fetchall()
+    return users
+
+async def handle_bc_user_search(update, context, text):
+    users = await do_user_search(update, text)
+    if not users:
+        await update.message.reply_text(
+            "کاربری با مشخصات ارسالی یافت نشد\nلطفا دوباره ارسال فرمایید:",
+            reply_markup=back_button()
+        )
+        return
+    txt, _ = user_search_result_text(users, 0)
+    kb = user_search_kb(users, 0)
+    await update.message.reply_text(txt, reply_markup=inline(kb))
+
+# ==================== جستجوی کانال ====================
+def channel_search_result_text(channels, page):
+    per_page = 10
+    start = page * per_page
+    chunk = channels[start:start+per_page]
+    txt = f"{len(channels)} کانال یافت شد:\n\n"
+    for i, ch in enumerate(chunk, start+1):
+        uname = ch["channel"]
+        cid = ch["channel_id"] or "نامشخص"
+        txt += (
+            f"{i}. نام کانال: @{uname}\n"
+            f"🆔 یوزرنیم : @{uname}\n"
+            f"🔰 شناسه عددی : {cid}\n\n"
+        )
+    return txt, chunk
+
+def channel_search_kb(channels, page):
+    per_page = 10
+    total_pages = math.ceil(len(channels) / per_page)
+    start = page * per_page
+    chunk = channels[start:start+per_page]
+    rows = []
+    for ch in chunk:
+        uname = (ch["channel"] or "")[:20]
+        cid = ch["channel_id"] or ch["channel"]
+        rows.append([(f"📤 ارسال به @{uname}", f"bc_channel_pick:{cid}")])
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(("⬅️ قبلی", f"bc_channel_page:{page-1}"))
+        if page < total_pages - 1:
+            nav.append(("بعدی ➡️", f"bc_channel_page:{page+1}"))
+        rows.append(nav)
+    rows.append([("🔙 بازگشت به پنل مدیریت", "bc_back_panel")])
+    return rows
+
+async def handle_bc_channel_search(update, context, text):
+    qc = text.strip().lstrip("@")
+    with db.conn() as c:
+        if qc.isdigit() or qc.startswith("-"):
+            channels = c.execute(
+                "SELECT DISTINCT channel, channel_id FROM orders WHERE channel_id = ? LIMIT 50",
+                (qc,)
+            ).fetchall()
+        else:
+            channels = c.execute(
+                "SELECT DISTINCT channel, channel_id FROM orders WHERE channel LIKE ? LIMIT 50",
+                (f"%{qc}%",)
+            ).fetchall()
+    if not channels:
+        await update.message.reply_text(
+            "کانالی با مشخصات ارسالی یافت نشد\nلطفا دوباره ارسال فرمایید:",
+            reply_markup=back_button()
+        )
+        return
+    txt, _ = channel_search_result_text(channels, 0)
+    kb = channel_search_kb(channels, 0)
+    await update.message.reply_text(txt, reply_markup=inline(kb))
+
+# ==================== انتخاب کاربر/کانال ====================
+async def bc_user_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    uid = int(q.data.split(":")[1])
+    with db.conn() as c:
+        u = c.execute("SELECT first_name FROM users WHERE user_id = ?", (uid,)).fetchone()
+    name = u["first_name"] if u else "کاربر"
+    from bot_manager import set_user_state
+    set_user_state(q.from_user.id, "bc_text", {"mode": "specific_user", "target_id": uid})
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        q.from_user.id,
+        f"شما در حال ارسال پیام به {name} هستید\nلطفا متن پیام خود را وارد فرمایید :",
+        reply_markup=back_button()
+    )
+
+async def bc_channel_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    cid = q.data.split(":", 1)[1]
+    from bot_manager import set_user_state
+    set_user_state(q.from_user.id, "bc_text", {"mode": "specific_channel", "target_id": cid})
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        q.from_user.id,
+        f"شما در حال ارسال پیام در کانال هستید\nلطفا متن پیام خود را وارد فرمایید :",
+        reply_markup=back_button()
+    )
+
+# ==================== تأیید ارسال ====================
+async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    from bot_manager import get_user_state, set_user_state
+    state, data = get_user_state(user_id)
+    if state != "bc_confirm":
+        return
+    text = data.get("text", "")
+    mode = data.get("mode", "")
+    target = data.get("target")
+    target_id = data.get("target_id")
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    sent = 0
+    failed = 0
+    if mode == "bot":
+        now_ts_val = int(datetime.now().timestamp())
+        with db.conn() as c:
+            if target == "all":
+                rows = c.execute("SELECT user_id FROM users WHERE banned = 0").fetchall()
+            elif target == "active3":
+                rows = c.execute(
+                    "SELECT user_id FROM users WHERE banned = 0 AND last_daily >= ?",
+                    (now_ts_val - 3*86400,)
+                ).fetchall()
+            elif target == "inactive3":
+                rows = c.execute(
+                    "SELECT user_id FROM users WHERE banned = 0 AND (last_daily < ? OR last_daily = 0)",
+                    (now_ts_val - 3*86400,)
+                ).fetchall()
+            elif target == "inactive7":
+                rows = c.execute(
+                    "SELECT user_id FROM users WHERE banned = 0 AND (last_daily < ? OR last_daily = 0)",
+                    (now_ts_val - 7*86400,)
+                ).fetchall()
             else:
-                await msg.copy(r["user_id"])
-            sent += 1
-        except Exception:
-            failed += 1
-    
-    set_user_state(update.effective_user.id, "none")
-    await msg.reply_text(
+                rows = []
+        for r in rows:
+            try:
+                await context.bot.send_message(r["user_id"], text, parse_mode="HTML")
+                sent += 1
+            except Exception:
+                failed += 1
+    elif mode == "channel_all":
+        with db.conn() as c:
+            chs = c.execute(
+                "SELECT DISTINCT channel FROM orders WHERE status IN ('running','completed')"
+            ).fetchall()
+        for ch in chs:
+            try:
+                await context.bot.send_message(f"@{ch['channel']}", text, parse_mode="HTML")
+                sent += 1
+            except Exception:
+                failed += 1
+    elif mode == "specific_channel":
+        if target_id:
+            try:
+                await context.bot.send_message(target_id, text, parse_mode="HTML")
+                sent += 1
+            except Exception as e:
+                failed += 1
+                await context.bot.send_message(user_id, f"❌ خطا: {e}")
+    elif mode == "specific_user":
+        if target_id:
+            try:
+                await context.bot.send_message(target_id, text, parse_mode="HTML")
+                sent += 1
+            except Exception as e:
+                failed += 1
+                await context.bot.send_message(user_id, f"❌ خطا: {e}")
+    set_user_state(user_id, "none")
+    await context.bot.send_message(
+        user_id,
         f"✅ ارسال شد.\n✔️ موفق: {sent}\n❌ ناموفق: {failed}",
         reply_markup=admin_panel()
     )
+
+async def bc_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer("لغو شد.")
+    from bot_manager import set_user_state
+    set_user_state(q.from_user.id, "none")
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(q.from_user.id, "👑 پنل مدیریت", reply_markup=admin_panel())
 
 # ==================== ادمین‌ها ====================
 async def admins_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -139,18 +454,19 @@ async def power_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== روتر وضعیت ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """پردازش state ادمین — True اگه هندل شد"""
     user = update.effective_user
     if not is_admin(user.id):
         return False
     from bot_manager import get_user_state, set_user_state
     state, data = get_user_state(user.id)
-    if state == "none" or not state:
+    if not state or state == "none":
         return False
-    
     msg = update.message
     text = (msg.text or "").strip()
-    
+    if text == "🔙 بازگشت به پنل مدیریت":
+        set_user_state(user.id, "none")
+        await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
+        return True
     if state == "admin_search_id":
         if text == "🔙 بازگشت":
             set_user_state(user.id, "none")
@@ -164,7 +480,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 await msg.reply_text("❌ کاربر یافت نشد.")
             set_user_state(user.id, "none")
             return True
-    
     if state == "admin_warn":
         if text == "🔙 بازگشت":
             set_user_state(user.id, "none")
@@ -187,15 +502,21 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 await msg.reply_text("❌ کاربر یافت نشد.")
             set_user_state(user.id, "none")
             return True
-    
-    if state == "broadcast_text":
-        await do_broadcast(update, context, fwd=False)
+    if state == "bc_text":
+        set_user_state(user.id, "bc_confirm", {**data, "text": text})
+        await msg.reply_text(
+            "آیا از ارسال پیام خود مطمئن هستید ؟",
+            reply_markup=inline([
+                [("✅ بله", "bc_confirm_yes"), ("❌ خیر", "bc_confirm_no")],
+            ])
+        )
         return True
-    
-    if state == "broadcast_fwd":
-        await do_broadcast(update, context, fwd=True)
+    if state == "bc_search_user":
+        await handle_bc_user_search(update, context, text)
         return True
-    
+    if state == "bc_search_channel":
+        await handle_bc_channel_search(update, context, text)
+        return True
     return False
 
 # ==================== روتر callback ====================
@@ -203,17 +524,88 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     q = update.callback_query
     data = q.data
     user = q.from_user
-    
     if not is_admin(user.id):
         return False
-    
-    if data == "bc_text":
-        await q.answer()
-        await broadcast_run(update, context, fwd=False)
+    if data == "bc_to_bot":
+        await bc_to_bot(update, context)
         return True
-    if data == "bc_fwd":
+    if data.startswith("bc_bot:"):
+        await bc_bot_target(update, context)
+        return True
+    if data == "bc_to_channel":
+        await bc_to_channel(update, context)
+        return True
+    if data == "bc_to_user":
+        await bc_to_user(update, context)
+        return True
+    if data == "bc_to_specific_channel":
+        await bc_to_specific_channel(update, context)
+        return True
+    if data == "bc_back_panel":
+        await bc_back_panel(update, context)
+        return True
+    if data == "bc_confirm_yes":
+        await bc_confirm(update, context)
+        return True
+    if data == "bc_confirm_no":
+        await bc_cancel(update, context)
+        return True
+    if data.startswith("bc_user_pick:"):
+        await bc_user_pick(update, context)
+        return True
+    if data.startswith("bc_channel_pick:"):
+        await bc_channel_pick(update, context)
+        return True
+    if data.startswith("bc_user_page:"):
         await q.answer()
-        await broadcast_run(update, context, fwd=True)
+        page = int(data.split(":")[1])
+        # برای صفحه‌بندی، state جستجو حفظ میشه و از دیتابیس دوباره می‌خونیم
+        # چون لیست ذخیره نشده، این ساده‌ترین راهه
+        from bot_manager import get_user_state
+        state, sdata = get_user_state(user.id)
+        query = sdata.get("last_query", "")
+        if not query:
+            await q.answer("دوباره جستجو کنید.", show_alert=True)
+            return True
+        users = await do_user_search(update, query)
+        if not users:
+            return True
+        txt, _ = user_search_result_text(users, page)
+        kb = user_search_kb(users, page)
+        try:
+            await q.message.edit_text(txt, reply_markup=inline(kb))
+        except Exception:
+            pass
+        return True
+    if data.startswith("bc_channel_page:"):
+        await q.answer()
+        page = int(data.split(":")[1])
+        from bot_manager import get_user_state
+        state, sdata = get_user_state(user.id)
+        query = sdata.get("last_query", "")
+        if not query:
+            await q.answer("دوباره جستجو کنید.", show_alert=True)
+            return True
+        qc = query.strip().lstrip("@")
+        with db.conn() as c:
+            if qc.isdigit() or qc.startswith("-"):
+                channels = c.execute(
+                    "SELECT DISTINCT channel, channel_id FROM orders WHERE channel_id = ? LIMIT 50",
+                    (qc,)
+                ).fetchall()
+            else:
+                channels = c.execute(
+                    "SELECT DISTINCT channel, channel_id FROM orders WHERE channel LIKE ? LIMIT 50",
+                    (f"%{qc}%",)
+                ).fetchall()
+        if not channels:
+            return True
+        txt, _ = channel_search_result_text(channels, page)
+        kb = channel_search_kb(channels, page)
+        try:
+            await q.message.edit_text(txt, reply_markup=inline(kb))
+        except Exception:
+            pass
         return True
     if data == "admins_list":
         await admins_list_cb(update, context)
@@ -229,7 +621,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         set_user_state(user.id, "set_power_text")
         await q.message.reply_text("📝 متن خاموشی را ارسال کنید:")
         return True
-    
     return False
 
 # ==================== روتر متن (دکمه‌ها) ====================
