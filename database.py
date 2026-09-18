@@ -52,7 +52,8 @@ class Database:
                     today_earned    INTEGER DEFAULT 0,
                     today_date      TEXT,
                     referral_today  INTEGER DEFAULT 0,
-                    referral_rewarded INTEGER DEFAULT 0
+                    referral_rewarded INTEGER DEFAULT 0,
+                    send_coin_admin INTEGER DEFAULT 0
                 )
             """)
             
@@ -65,6 +66,7 @@ class Database:
                 "today_date": "TEXT",
                 "referral_today": "INTEGER DEFAULT 0",
                 "referral_rewarded": "INTEGER DEFAULT 0",
+                "send_coin_admin": "INTEGER DEFAULT 0",
             }
             for col, col_type in new_columns.items():
                 if col not in existing_columns:
@@ -129,7 +131,7 @@ class Database:
                 )
             """)
             
-            # === کدهای هدیه (جدید) ===
+            # === کدهای هدیه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS gift_codes (
                     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +149,7 @@ class Database:
                 )
             """)
             
-            # === اضافه کردن ستون‌های جدید به gift_codes (برای دیتابیس‌های قدیمی) ===
+            # === اضافه کردن ستون‌های جدید به gift_codes ===
             gift_cols = [r[1] for r in c.execute("PRAGMA table_info(gift_codes)").fetchall()]
             if "id" not in gift_cols:
                 c.execute("DROP TABLE IF EXISTS gift_codes")
@@ -193,6 +195,32 @@ class Database:
                     position    INTEGER
                 )
             """)
+            
+            # === آیتم‌های سفارش ممبر ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS order_items (
+                    key         TEXT PRIMARY KEY,
+                    name        TEXT,
+                    members     INTEGER,
+                    coins       INTEGER,
+                    position    INTEGER
+                )
+            """)
+            
+            # === اضافه کردن پیش‌فرض‌های order_items ===
+            default_items = [
+                ("item_20",  "👤 20 ممبر",   20,  40,  1),
+                ("item_10",  "👤 10 ممبر",   10,  20,  2),
+                ("item_100", "👤 100 ممبر",  100, 200, 3),
+                ("item_50",  "👤 50 ممبر",   50,  100, 4),
+                ("item_400", "👤 400 ممبر",  400, 800, 5),
+                ("item_200", "👤 200 ممبر",  200, 400, 6),
+            ]
+            for key, name, members, coins, pos in default_items:
+                c.execute("""
+                    INSERT OR IGNORE INTO order_items (key, name, members, coins, position)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (key, name, members, coins, pos))
             
             # === متن‌ها و تنظیمات ===
             c.execute("""
