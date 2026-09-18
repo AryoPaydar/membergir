@@ -16,6 +16,10 @@ def main_menu(is_admin=False):
 def back_button():
     return ReplyKeyboardMarkup([["🔙 بازگشت"]], resize_keyboard=True)
 
+# ==================== کیبورد انصراف کاربر (کد هدیه) ====================
+def gift_user_back_keyboard():
+    return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
+
 # ==================== کیبورد پنل ادمین ====================
 def admin_panel():
     return ReplyKeyboardMarkup([
