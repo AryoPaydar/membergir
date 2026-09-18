@@ -12,6 +12,8 @@ from bot_manager import (
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
     panel, orders_history, top, admin_shop, admin_texts, history,
+    admin_coins, admin_user_info, admin_complete, admin_channels,
+    admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
 )
 from utils.keyboards import main_menu
 
@@ -36,21 +38,34 @@ USER_BUTTONS = {
 }
 
 ADMIN_BUTTONS = {
-    "🛍 مدیریت فروشگاه": admin_shop.shop_admin_menu,
-    "📇 تنظیم متن‌ها": admin_texts.texts_menu,
+    "📈 آمار ربات": admin.stats,
+    "📨 ارسال پیام": admin.broadcast_start,
+    "🎉 کد هدیه": None,  # جدا هندل میشه
+    "🏦 مبادلات سکه": admin_coins.coins_menu,
+    "📌 تنظیم سفارش": admin_orders.orders_menu,
+    "♻️ پنل‌ها": admin_panels.panels_menu,
+    "👤 ادمین‌ها": admin.admins_menu,
+    "🆔 آیدی‌یاب": admin.id_finder,
+    "📇 تنظیم متن": admin_texts.texts_menu,
+    "🆔 تنظیم کانال": admin_channels.channels_menu,
+    "⚠️ اخطاردهی": admin.warn_user,
+    "⚙️ زیرمجموعه‌گیری": admin_referral.referral_menu,
+    "🎗 تکمیل سفارش": admin_complete.complete_menu,
+    "🛐 پیگیری کاربر": admin_user_info.user_info,
+    "✂️ تنظیمات لغو": admin_cancel.cancel_menu,
+    "💳 تنظیمات انتقال": admin_transfer.transfer_menu,
+    "🔕 خاموش/روشن": admin.power_menu,
+    "🔙 بازگشت به منو": admin.back_to_main,
 }
 
 
 # ==================== ردیاب کانال/گروه ====================
 async def track_chat(update: Update, context):
-    """وقتی ربات به کانال/گروهی اضافه یا حذف میشه"""
     my_chat_member = update.my_chat_member
     if not my_chat_member:
         return
-    
     chat = my_chat_member.chat
     new_status = my_chat_member.new_chat_member.status
-    
     if new_status in ("administrator", "member", "creator"):
         with db.conn() as c:
             c.execute("""
@@ -61,12 +76,9 @@ async def track_chat(update: Update, context):
                     title = excluded.title,
                     username = excluded.username
             """, (chat.id, chat.type, chat.title or "", chat.username or ""))
-        print(f"✅ ربات به {chat.type} {chat.title} (ID: {chat.id}) اضافه شد")
-    
     elif new_status in ("left", "kicked"):
         with db.conn() as c:
             c.execute("DELETE FROM bot_chats WHERE chat_id = ?", (chat.id,))
-        print(f"❌ ربات از {chat.type} {chat.title} (ID: {chat.id}) حذف شد")
 
 
 async def on_message(update: Update, context):
@@ -84,21 +96,31 @@ async def on_message(update: Update, context):
     if not get_user(user_tg.id):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
     
-    # ۱. State کاربر — gift اول
+    # ۱. State کاربر
     for module in (gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             if await module.handle_state(update, context):
                 return
     
-    # ۲. State ادمین — gift دوم
+    # ۲. State ادمین
     if is_admin(user_tg.id):
-        for module in (gift, admin, admin_shop, admin_texts):
+        admin_modules = (
+            admin, admin_shop, admin_texts, admin_coins, admin_user_info,
+            admin_complete, admin_channels, admin_cancel, admin_transfer,
+            admin_referral, admin_panels, admin_orders,
+        )
+        for module in admin_modules:
             if hasattr(module, "handle_state"):
                 if await module.handle_state(update, context):
                     return
         if await admin.handle_text(update, context):
             return
-        if text in ADMIN_BUTTONS:
+        # چک دکمه‌های ادمین
+        if text == "🎉 کد هدیه":
+            from handlers import gift
+            await gift.gift_admin_menu(update, context)
+            return
+        if text in ADMIN_BUTTONS and ADMIN_BUTTONS[text]:
             await ADMIN_BUTTONS[text](update, context)
             return
     
@@ -128,21 +150,12 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
     
-    # 👇 ترتیب مهم: gift اول
     modules = [
-        gift,
-        ads,
-        user,
-        admin,
-        transfer,
-        referral,
-        shop,
-        panel,
-        orders_history,
-        top,
-        admin_shop,
-        admin_texts,
-        history,
+        gift, ads, user, admin,
+        admin_coins, admin_user_info, admin_complete, admin_channels,
+        admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
+        transfer, referral, shop, panel, orders_history, top,
+        admin_shop, admin_texts, history,
     ]
     for module in modules:
         if hasattr(module, "handle_callback"):
@@ -169,16 +182,11 @@ def main():
     app.add_handler(CommandHandler("start", user.start))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app.add_handler(CallbackQueryHandler(on_callback))
-    app.add_handler(
-        ChatMemberHandler(track_chat, ChatMemberHandler.MY_CHAT_MEMBER)
-    )
+    app.add_handler(ChatMemberHandler(track_chat, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_error_handler(on_error)
     
     logger.info("Bot is running.")
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True
-    )
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
 if __name__ == "__main__":
