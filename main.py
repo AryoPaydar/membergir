@@ -135,7 +135,6 @@ async def on_message(update: Update, context):
         
         # کد هدیه (جدا)
         if text == "🎉 کد هدیه":
-            from handlers import gift
             await gift.gift_admin_menu(update, context)
             logger.info("✅ gift.gift_admin_menu handled")
             return
