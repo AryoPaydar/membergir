@@ -19,26 +19,19 @@ def health():
     return {"status": "ok", "service": "telegram-bot"}
 
 
-def run_telegram():
-    """اجرای ربات توی thread جداگانه با event loop مخصوص خودش"""
-    try:
-        # ساخت یه event loop جدید برای این thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        logger.info("Importing main...")
-        from main import main as run_bot
-        logger.info("Starting bot...")
-        run_bot()
-    except Exception as e:
-        logger.exception(f"Bot crashed: {e}")
+def run_flask():
+    """اجرای Flask توی thread جداگانه"""
+    port = int(os.environ.get("PORT", 8080))
+    logger.info(f"Starting Flask on port {port}")
+    app.run(host="0.0.0.0", port=port, use_reloader=False)
 
 
 if __name__ == "__main__":
-    # ربات توی thread جداگانه
-    Thread(target=run_telegram, daemon=True).start()
+    # Flask توی thread جداگانه (daemon)
+    Thread(target=run_flask, daemon=True).start()
     
-    # Flask روی پورت Render
-    port = int(os.environ.get("PORT", 8080))
-    logger.info(f"Starting Flask on port {port}")
-    app.run(host="0.0.0.0", port=port)
+    # ربات توی main thread
+    logger.info("Importing main...")
+    from main import main as run_bot
+    logger.info("Starting bot...")
+    run_bot()
