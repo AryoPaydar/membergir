@@ -1,6 +1,7 @@
 import os
-import threading
+import asyncio
 import logging
+from threading import Thread
 from flask import Flask
 
 logging.basicConfig(
@@ -19,7 +20,12 @@ def health():
 
 
 def run_telegram():
+    """اجرای ربات توی thread جداگانه با event loop مخصوص خودش"""
     try:
+        # ساخت یه event loop جدید برای این thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         logger.info("Importing main...")
         from main import main as run_bot
         logger.info("Starting bot...")
@@ -30,7 +36,7 @@ def run_telegram():
 
 if __name__ == "__main__":
     # ربات توی thread جداگانه
-    threading.Thread(target=run_telegram, daemon=True).start()
+    Thread(target=run_telegram, daemon=True).start()
     
     # Flask روی پورت Render
     port = int(os.environ.get("PORT", 8080))
