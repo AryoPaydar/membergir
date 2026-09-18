@@ -84,7 +84,7 @@ async def on_message(update: Update, context):
     if not get_user(user_tg.id):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
     
-    # ۱. State کاربر — gift اول (کد هدیه)
+    # ۱. State کاربر — gift اول
     for module in (gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             if await module.handle_state(update, context):
@@ -130,7 +130,7 @@ async def on_callback(update: Update, context):
     
     # 👇 ترتیب مهم: gift اول
     modules = [
-        gift,          # 👈 کد هدیه اول
+        gift,
         ads,
         user,
         admin,
