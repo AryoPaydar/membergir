@@ -37,16 +37,11 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     with db.conn() as c:
-        # کاربران
         total = c.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
         banned = c.execute("SELECT COUNT(*) c FROM users WHERE banned=1").fetchone()["c"]
         warned = c.execute("SELECT COUNT(*) c FROM users WHERE warnings > 0").fetchone()["c"]
-        
-        # سفارشات
         orders = c.execute("SELECT COUNT(*) c FROM orders").fetchone()["c"]
         running = c.execute("SELECT COUNT(*) c FROM orders WHERE status='running'").fetchone()["c"]
-        
-        # کانال‌ها و گروه‌ها
         channels = c.execute(
             "SELECT COUNT(*) c FROM bot_chats WHERE chat_type = 'channel'"
         ).fetchone()["c"]
@@ -90,7 +85,6 @@ async def bc_back_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     await context.bot.send_message(q.from_user.id, "👑 پنل مدیریت", reply_markup=admin_panel())
 
-# === ارسال در ربات ===
 async def bc_to_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -122,7 +116,6 @@ async def bc_bot_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=back_button()
     )
 
-# === ارسال در کانال ===
 async def bc_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -139,7 +132,6 @@ async def bc_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=back_button()
     )
 
-# === ارسال به کاربر خاص ===
 async def bc_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -156,7 +148,6 @@ async def bc_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=back_button()
     )
 
-# === ارسال در کانال خاص ===
 async def bc_to_specific_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -173,7 +164,6 @@ async def bc_to_specific_channel(update: Update, context: ContextTypes.DEFAULT_T
         reply_markup=back_button()
     )
 
-# ==================== جستجوی کاربر ====================
 def user_search_result_text(users, page):
     per_page = 10
     start = page * per_page
@@ -237,7 +227,6 @@ async def handle_bc_user_search(update, context, text):
     kb = user_search_kb(users, 0)
     await update.message.reply_text(txt, reply_markup=inline(kb))
 
-# ==================== جستجوی کانال ====================
 def channel_search_result_text(channels, page):
     per_page = 10
     start = page * per_page
@@ -299,7 +288,6 @@ async def handle_bc_channel_search(update, context, text):
     kb = channel_search_kb(channels, 0)
     await update.message.reply_text(txt, reply_markup=inline(kb))
 
-# ==================== انتخاب کاربر/کانال ====================
 async def bc_user_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -335,7 +323,6 @@ async def bc_channel_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=back_button()
     )
 
-# ==================== تأیید ارسال ====================
 async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -409,7 +396,6 @@ async def bc_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 failed += 1
                 failed_chats.append(info)
         
-        # ذخیره لیست در state_data برای دکمه‌های شیشه‌ای
         set_user_state(user_id, "bc_result", {
             "success": success_chats,
             "failed": failed_chats,
@@ -466,7 +452,6 @@ async def bc_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     await context.bot.send_message(q.from_user.id, "👑 پنل مدیریت", reply_markup=admin_panel())
 
-# ==================== نمایش لیست موفق/ناموفق ====================
 def _format_chat_list(chats, page):
     per_page = 10
     start = page * per_page
@@ -545,7 +530,6 @@ async def bc_show_failed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-# ==================== ادمین‌ها ====================
 async def admins_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -561,7 +545,6 @@ async def admins_list_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📜 لیست مدیران:\n\n" + "\n".join(f"• <a href='tg://user?id={a}'>{a}</a>" for a in admins)
     await q.message.reply_text(text, parse_mode="HTML")
 
-# ==================== آیدی‌یاب ====================
 async def id_finder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -569,7 +552,6 @@ async def id_finder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_user_state(update.effective_user.id, "admin_search_id")
     await update.message.reply_text("🆔 آیدی عددی کاربر را وارد کنید:", reply_markup=back_button())
 
-# ==================== اخطار ====================
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -577,7 +559,6 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_user_state(update.effective_user.id, "admin_warn")
     await update.message.reply_text("🆔 آیدی کاربر را وارد کنید:", reply_markup=back_button())
 
-# ==================== خاموش/روشن ====================
 async def power_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -590,7 +571,6 @@ async def power_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ==================== روتر وضعیت ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.effective_user
     if not is_admin(user.id):
@@ -659,7 +639,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         return True
     return False
 
-# ==================== روتر callback ====================
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
@@ -767,7 +746,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return True
     return False
 
-# ==================== روتر متن (دکمه‌ها) ====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     from handlers import admin_shop, admin_texts
     
@@ -778,6 +756,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
     
     if not is_admin(update.effective_user.id):
         return False
+    
+    # 👇 دکمه کد هدیه
+    if text == "🎉 کد هدیه":
+        from handlers import gift
+        await gift.gift_admin_menu(update, context)
+        return True
     
     ADMIN_BUTTONS = {
         "📈 آمار ربات": stats,
