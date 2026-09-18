@@ -129,14 +129,54 @@ class Database:
                 )
             """)
             
-            # === کدهای هدیه ===
+            # === کدهای هدیه (جدید) ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS gift_codes (
-                    code        TEXT PRIMARY KEY,
-                    amount      INTEGER NOT NULL,
-                    used_by     INTEGER,
-                    used_at     TIMESTAMP,
-                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code                TEXT NOT NULL,
+                    amount              INTEGER NOT NULL,
+                    max_users           INTEGER DEFAULT 1,
+                    used_count          INTEGER DEFAULT 0,
+                    post_id             INTEGER,
+                    post_success_id     INTEGER,
+                    type                TEXT DEFAULT 'global',
+                    target_user_id      INTEGER,
+                    created_by          INTEGER,
+                    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active           INTEGER DEFAULT 1
+                )
+            """)
+            
+            # === اضافه کردن ستون‌های جدید به gift_codes (برای دیتابیس‌های قدیمی) ===
+            gift_cols = [r[1] for r in c.execute("PRAGMA table_info(gift_codes)").fetchall()]
+            if "id" not in gift_cols:
+                c.execute("DROP TABLE IF EXISTS gift_codes")
+                c.execute("""
+                    CREATE TABLE gift_codes (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        code                TEXT NOT NULL,
+                        amount              INTEGER NOT NULL,
+                        max_users           INTEGER DEFAULT 1,
+                        used_count          INTEGER DEFAULT 0,
+                        post_id             INTEGER,
+                        post_success_id     INTEGER,
+                        type                TEXT DEFAULT 'global',
+                        target_user_id      INTEGER,
+                        created_by          INTEGER,
+                        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active           INTEGER DEFAULT 1
+                    )
+                """)
+            
+            # === دریافت‌کنندگان کد هدیه ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS gift_code_users (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code_id     INTEGER NOT NULL,
+                    user_id     INTEGER NOT NULL,
+                    used_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(code_id, user_id),
+                    FOREIGN KEY (code_id) REFERENCES gift_codes(id)
                 )
             """)
             
@@ -188,6 +228,10 @@ class Database:
             c.execute("CREATE INDEX IF NOT EXISTS idx_tx_from ON transactions(from_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_tx_to ON transactions(to_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_users_ref ON users(referrer_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_code_id ON gift_code_users(code_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_user_id ON gift_code_users(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_active ON gift_codes(is_active)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_type ON gift_codes(type)")
             
             # === ادمین اصلی ===
             c.execute(
