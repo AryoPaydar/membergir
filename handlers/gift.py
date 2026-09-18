@@ -428,6 +428,33 @@ async def handle_gift_user_search(update, context, text):
     await update.message.reply_text(txt, reply_markup=inline(rows))
 
 
+# ==================== انتخاب کاربر ====================
+async def gift_user_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    try:
+        uid = int(q.data.split(":")[1])
+    except (ValueError, IndexError):
+        return
+    
+    user = get_user(uid)
+    name = user["first_name"] if user else "کاربر"
+    
+    set_user_state(q.from_user.id, "gift_user_amount", {"target_id": uid})
+    
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    
+    await context.bot.send_message(
+        q.from_user.id,
+        f"شما در حال ارسال هدیه به {name} هستید\nلطفا مقدار هدیه خود را وارد فرمایید :",
+        reply_markup=back_button()
+    )
+
+
 # ==================== State Handler ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
