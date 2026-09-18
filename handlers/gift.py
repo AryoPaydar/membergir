@@ -402,7 +402,7 @@ async def handle_gift_user_search(update, context, text):
         else:
             users = c.execute(
                 "SELECT user_id, first_name, username FROM users WHERE username LIKE ? OR first_name LIKE ?",
-                (f"%{query_clean}%", f"%{query}%")
+                (f"%{query_clean}%", f"%{query_clean}%")
             ).fetchall()
     
     if not users:
@@ -426,25 +426,6 @@ async def handle_gift_user_search(update, context, text):
     rows.append([("🔙 بازگشت به پنل مدیریت", "gift_admin_back")])
     
     await update.message.reply_text(txt, reply_markup=inline(rows))
-
-
-# ==================== انتخاب کاربر ====================
-async def gift_user_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    uid = int(q.data.split(":")[1])
-    user = get_user(uid)
-    name = user["first_name"] if user else "کاربر"
-    set_user_state(q.from_user.id, "gift_user_amount", {"target_id": uid})
-    try:
-        await q.message.delete()
-    except Exception:
-        pass
-    await context.bot.send_message(
-        q.from_user.id,
-        f"شما در حال ارسال هدیه به {name} هستید\nلطفا مقدار هدیه خود را وارد فرمایید :",
-        reply_markup=back_button()
-    )
 
 
 # ==================== State Handler ====================
