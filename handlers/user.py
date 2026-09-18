@@ -16,19 +16,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     args = context.args
     
-    # بررسی بن
     if is_banned(user.id):
         await msg.reply_text("⛔️ شما از ربات مسدود شده‌اید.")
         return
     
-    # چک قدرت ربات
     from bot_manager import is_bot_on, get_setting
     if not is_bot_on() and not is_admin(user.id):
         text = get_setting("power_text", "ربات در حال حاضر خاموش است.")
         await msg.reply_text(text)
         return
     
-    # ساخت یا دریافت کاربر
     db_user = get_user(user.id)
     referrer_id = None
     if not db_user and args:
@@ -47,7 +44,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update_user(user.id, first_name=user.first_name or "", username=user.username or "")
         update_user(user.id, state="none")
         
-        # ریست شمارنده‌های روزانه اگه روز عوض شده
         today, _ = jalali_now()
         if db_user.get("today_date") != today:
             with db.conn() as c:
@@ -57,7 +53,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     WHERE user_id = ?
                 """, (today, user.id))
     
-    # چک جوین اجباری
     if not await check_force_join(context, user.id):
         return
     
@@ -68,7 +63,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def check_force_join(context, user_id):
-    """چک عضویت اجباری — اگه کاربر عضو نبود، پیام بده"""
     missing = []
     for ch in (Config.FORCE_CHANNEL_1, Config.FORCE_CHANNEL_2):
         if ch and not await check_membership(context, ch, user_id):
@@ -92,12 +86,10 @@ async def check_force_join(context, user_id):
     return False
 
 async def handle_referral_join(context, referrer_id, new_user_id):
-    """اطلاعیه زیرمجموعه جدید — فقط اطلاع‌رسانی، بدون پاداش فوری"""
     referrer = get_user(referrer_id)
     if not referrer:
         return
     
-    # الماس هدیه و درصد پورسانت بر اساس پنل معرف
     panel_cfg = get_panel_config(referrer.get("panel", "عادی"))
     invite_coin = panel_cfg["invite_coin"]
     commission_percent = {
@@ -106,7 +98,6 @@ async def handle_referral_join(context, referrer_id, new_user_id):
         "ویژه": 15,
     }.get(referrer.get("panel", "عادی"), 5)
     
-    # ارسال اطلاعیه به معرف
     try:
         await context.bot.send_message(
             referrer_id,
@@ -122,7 +113,6 @@ async def handle_referral_join(context, referrer_id, new_user_id):
     except Exception:
         pass
     
-    # گزارش به ادمین
     from bot_manager import get_setting
     if get_setting("referral_report", "on") == "on":
         try:
@@ -133,7 +123,6 @@ async def handle_referral_join(context, referrer_id, new_user_id):
         except Exception:
             pass
 
-# ==================== حساب کاربری ====================
 async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(update.effective_user.id)
     if not user:
@@ -146,7 +135,6 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=inline([[("🔗 اشتراک آیدی من", f"share_id")]])
     )
 
-# ==================== دریافت سکه (منوی الماس رایگان) ====================
 async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(update.effective_user.id)
     if not user:
@@ -184,7 +172,6 @@ async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
-# ==================== کلیک روی دکمه الماس روزانه ====================
 async def daily_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
@@ -225,15 +212,13 @@ async def daily_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
         show_alert=True
     )
 
-# ==================== دکمه خرید الماس ====================
 async def go_to_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
     from handlers import shop
     await shop.shop_menu_from_callback(update, context)
-    
-# ==================== بازگشت به منو ====================
+
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     update_user(user.id, state="none", state_data=None)
@@ -242,7 +227,6 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu(is_admin(user.id))
     )
 
-# ==================== اشتراک آیدی ====================
 async def share_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -271,9 +255,7 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await q.answer("❌ هنوز عضو نشده‌اید!", show_alert=True)
 
-# ==================== روتر callback ====================
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """روتر callback برای user.py"""
     q = update.callback_query
     data = q.data
     
@@ -298,7 +280,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return True
     return False
 
-# ==================== State Handler ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """این ماژول state ندارد."""
+    """این ماژول state ندارد — ولی gift state رو پاس میدیم."""
+    from handlers import gift
+    if await gift.handle_state(update, context):
+        return True
     return False
