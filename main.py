@@ -51,7 +51,6 @@ async def track_chat(update: Update, context):
     chat = my_chat_member.chat
     new_status = my_chat_member.new_chat_member.status
     
-    # اگه ربات ادمین یا عضو شد
     if new_status in ("administrator", "member", "creator"):
         with db.conn() as c:
             c.execute("""
@@ -64,7 +63,6 @@ async def track_chat(update: Update, context):
             """, (chat.id, chat.type, chat.title or "", chat.username or ""))
         print(f"✅ ربات به {chat.type} {chat.title} (ID: {chat.id}) اضافه شد")
     
-    # اگه ربات حذف شد
     elif new_status in ("left", "kicked"):
         with db.conn() as c:
             c.execute("DELETE FROM bot_chats WHERE chat_id = ?", (chat.id,))
@@ -86,15 +84,15 @@ async def on_message(update: Update, context):
     if not get_user(user_tg.id):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
     
-    # ۱. State کاربر
-    for module in (ads, transfer, referral, gift, shop, panel, orders_history):
+    # ۱. State کاربر — gift اول (کد هدیه)
+    for module in (gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             if await module.handle_state(update, context):
                 return
     
-    # ۲. State ادمین
+    # ۲. State ادمین — gift دوم
     if is_admin(user_tg.id):
-        for module in (admin, admin_shop, admin_texts):
+        for module in (gift, admin, admin_shop, admin_texts):
             if hasattr(module, "handle_state"):
                 if await module.handle_state(update, context):
                     return
@@ -130,13 +128,14 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
     
+    # 👇 ترتیب مهم: gift اول
     modules = [
+        gift,          # 👈 کد هدیه اول
         ads,
         user,
         admin,
         transfer,
         referral,
-        gift,
         shop,
         panel,
         orders_history,
