@@ -40,13 +40,13 @@ USER_BUTTONS = {
 ADMIN_BUTTONS = {
     "📈 آمار ربات": admin.stats,
     "📨 ارسال پیام": admin.broadcast_start,
-    "🎉 کد هدیه": None,  # جدا هندل میشه
     "🏦 مبادلات سکه": admin_coins.coins_menu,
     "📌 تنظیم سفارش": admin_orders.orders_menu,
     "♻️ پنل‌ها": admin_panels.panels_menu,
     "👤 ادمین‌ها": admin.admins_menu,
     "🆔 آیدی‌یاب": admin.id_finder,
     "📇 تنظیم متن": admin_texts.texts_menu,
+    "📇 تنظیم متن‌ها": admin_texts.texts_menu,
     "🆔 تنظیم کانال": admin_channels.channels_menu,
     "⚠️ اخطاردهی": admin.warn_user,
     "⚙️ زیرمجموعه‌گیری": admin_referral.referral_menu,
@@ -76,9 +76,11 @@ async def track_chat(update: Update, context):
                     title = excluded.title,
                     username = excluded.username
             """, (chat.id, chat.type, chat.title or "", chat.username or ""))
+        logger.info(f"✅ ربات به {chat.type} {chat.title} (ID: {chat.id}) اضافه شد")
     elif new_status in ("left", "kicked"):
         with db.conn() as c:
             c.execute("DELETE FROM bot_chats WHERE chat_id = ?", (chat.id,))
+        logger.info(f"❌ ربات از {chat.type} {chat.title} (ID: {chat.id}) حذف شد")
 
 
 async def on_message(update: Update, context):
@@ -86,7 +88,10 @@ async def on_message(update: Update, context):
     msg = update.message
     text = (msg.text or "").strip()
     
+    logger.info(f"📨 on_message: '{text}' from user {user_tg.id} ({user_tg.first_name})")
+    
     if is_banned(user_tg.id):
+        logger.info(f"⛔️ User {user_tg.id} is banned")
         return
     
     if not is_bot_on() and not is_admin(user_tg.id):
@@ -95,15 +100,21 @@ async def on_message(update: Update, context):
     
     if not get_user(user_tg.id):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
+        logger.info(f"✅ Created user {user_tg.id}")
     
     # ۱. State کاربر
     for module in (gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
-            if await module.handle_state(update, context):
-                return
+            try:
+                if await module.handle_state(update, context):
+                    logger.info(f"✅ {module.__name__}.handle_state handled")
+                    return
+            except Exception as e:
+                logger.exception(f"State error in {module.__name__}: {e}")
     
     # ۲. State ادمین
     if is_admin(user_tg.id):
+        logger.info(f"👑 User {user_tg.id} is admin")
         admin_modules = (
             admin, admin_shop, admin_texts, admin_coins, admin_user_info,
             admin_complete, admin_channels, admin_cancel, admin_transfer,
@@ -111,28 +122,50 @@ async def on_message(update: Update, context):
         )
         for module in admin_modules:
             if hasattr(module, "handle_state"):
-                if await module.handle_state(update, context):
-                    return
+                try:
+                    if await module.handle_state(update, context):
+                        logger.info(f"✅ admin {module.__name__}.handle_state handled")
+                        return
+                except Exception as e:
+                    logger.exception(f"Admin state error in {module.__name__}: {e}")
+        
         if await admin.handle_text(update, context):
+            logger.info("✅ admin.handle_text handled")
             return
-        # چک دکمه‌های ادمین
+        
+        # کد هدیه (جدا)
         if text == "🎉 کد هدیه":
             from handlers import gift
             await gift.gift_admin_menu(update, context)
+            logger.info("✅ gift.gift_admin_menu handled")
             return
+        
+        # دکمه‌های ادمین
         if text in ADMIN_BUTTONS and ADMIN_BUTTONS[text]:
-            await ADMIN_BUTTONS[text](update, context)
-            return
+            try:
+                await ADMIN_BUTTONS[text](update, context)
+                logger.info(f"✅ ADMIN_BUTTON: {text}")
+                return
+            except Exception as e:
+                logger.exception(f"ADMIN_BUTTON error for '{text}': {e}")
+        
+        logger.info(f"❌ No admin handler for: '{text}'")
     
     # ۳. دکمه‌های کاربر
     if text in USER_BUTTONS:
-        await USER_BUTTONS[text](update, context)
-        return
+        try:
+            await USER_BUTTONS[text](update, context)
+            logger.info(f"✅ USER_BUTTON: {text}")
+            return
+        except Exception as e:
+            logger.exception(f"USER_BUTTON error for '{text}': {e}")
     
     if text == "🔙 بازگشت":
         await user.back_to_menu(update, context)
+        logger.info("✅ back_to_menu handled")
         return
     
+    logger.info(f"❓ Unknown command: '{text}'")
     await msg.reply_text(
         "❓ دستور نامعتبر.",
         reply_markup=main_menu(is_admin(user_tg.id))
@@ -141,6 +174,7 @@ async def on_message(update: Update, context):
 
 async def on_callback(update: Update, context):
     q = update.callback_query
+    logger.info(f"🔔 on_callback: '{q.data}' from user {q.from_user.id}")
     
     if is_banned(q.from_user.id):
         await q.answer()
@@ -161,10 +195,12 @@ async def on_callback(update: Update, context):
         if hasattr(module, "handle_callback"):
             try:
                 if await module.handle_callback(update, context):
+                    logger.info(f"✅ {module.__name__}.handle_callback handled: '{q.data}'")
                     return
             except Exception as e:
                 logger.exception(f"Callback error in {module.__name__}: {e}")
     
+    logger.info(f"❓ Callback not handled: '{q.data}'")
     try:
         await q.answer()
     except Exception:
@@ -186,7 +222,7 @@ def main():
     app.add_error_handler(on_error)
     
     logger.info("Bot is running.")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
