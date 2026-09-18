@@ -385,6 +385,14 @@ async def gift_del_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== جستجوی کاربر ====================
 async def handle_gift_user_search(update, context, text):
     query_clean = text.strip().lstrip("@")
+    
+    if not query_clean:
+        await update.message.reply_text(
+            "کاربری با مشخصات ارسالی مطابقت نداشت. لطفا دوباره تلاش کنید",
+            reply_markup=back_button()
+        )
+        return
+    
     with db.conn() as c:
         if query_clean.isdigit():
             users = c.execute(
@@ -399,7 +407,7 @@ async def handle_gift_user_search(update, context, text):
     
     if not users:
         await update.message.reply_text(
-            "کاربری با مشخصات ارسالی یافت نشد\nلطفا دوباره ارسال فرمایید:",
+            "کاربری با مشخصات ارسالی مطابقت نداشت. لطفا دوباره تلاش کنید",
             reply_markup=back_button()
         )
         return
