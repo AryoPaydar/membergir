@@ -757,11 +757,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
     if not is_admin(update.effective_user.id):
         return False
     
-    # 👇 دکمه کد هدیه
+    # کد هدیه جدا هندل میشه
     if text == "🎉 کد هدیه":
-        from handlers import gift
-        await gift.gift_admin_menu(update, context)
-        return True
+        return False  # توی main.py هندل میشه
     
     ADMIN_BUTTONS = {
         "📈 آمار ربات": stats,
@@ -773,9 +771,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
         "🔙 بازگشت به منو": back_to_main,
         "🛍 مدیریت فروشگاه": admin_shop.shop_admin_menu,
         "📇 تنظیم متن‌ها": admin_texts.texts_menu,
+        "📇 تنظیم متن": admin_texts.texts_menu,
     }
     
     if text in ADMIN_BUTTONS:
         await ADMIN_BUTTONS[text](update, context)
         return True
+    
     return False
