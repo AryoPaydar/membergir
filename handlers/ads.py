@@ -13,17 +13,6 @@ from utils.helpers import (
 )
 
 
-# ==================== آیتم‌های ثابت ثبت سفارش ====================
-ORDER_ITEMS = [
-    {"key": "item_20",   "members": 20,   "coins": 40},
-    {"key": "item_10",   "members": 10,   "coins": 20},
-    {"key": "item_100",  "members": 100,  "coins": 200},
-    {"key": "item_50",   "members": 50,   "coins": 100},
-    {"key": "item_400",  "members": 400,  "coins": 800},
-    {"key": "item_200",  "members": 200,  "coins": 400},
-]
-
-
 # ==================== تابع دریافت سکه عضویت (sync) ====================
 def get_panel_join_coin(panel):
     return Config.PANELS.get(panel, "عادی")["join_coin"]
@@ -38,14 +27,22 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ ثبت سفارش موقتاً غیرفعال است.")
         return
     
+    # 👇 از دیتابیس بخون
+    with db.conn() as c:
+        items = c.execute("SELECT * FROM order_items ORDER BY position").fetchall()
+    
+    if not items:
+        await update.message.reply_text("❌ هنوز آیتمی تنظیم نشده.")
+        return
+    
     text = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
     
     rows = []
-    for i in range(0, len(ORDER_ITEMS), 2):
+    for i in range(0, len(items), 2):
         row = []
-        for item in ORDER_ITEMS[i:i+2]:
-            btn_text = f"👤 {item['members']} نفر = {item['coins']} الماس 💎"
-            row.append((btn_text, f"order_pick:{item['key']}"))
+        for it in items[i:i+2]:
+            btn_text = f"👤 {it['members']} نفر = {it['coins']} الماس 💎"
+            row.append((btn_text, f"order_pick:{it['key']}"))
         rows.append(row)
     
     await update.message.reply_text(
@@ -60,15 +57,15 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     item_key = q.data.split(":", 1)[1]
     
-    item = None
-    for it in ORDER_ITEMS:
-        if it["key"] == item_key:
-            item = it
-            break
+    # 👇 از دیتابیس بخون
+    with db.conn() as c:
+        item = c.execute("SELECT * FROM order_items WHERE key = ?", (item_key,)).fetchone()
     
     if not item:
         await q.answer("❌ آیتم یافت نشد.", show_alert=True)
         return
+    
+    item = dict(item)
     
     user = get_user(user_id)
     if not user or user["coins"] < item["coins"]:
@@ -222,7 +219,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     
-    # 👇 اول سفارش رو توی دیتابیس ثبت کن (با post_id خالی)
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
@@ -230,7 +226,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (user_id, channel, channel_id, None, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
     
-    # 👇 حالا پست به کانال با order_id واقعی
     post_text = (
         f"‼️نام کانال : {channel_title}\n"
         f"\n"
@@ -253,7 +248,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=button
         )
     except Exception as e:
-        # اگه ارسال پست fail شد، سفارش رو حذف کن
         with db.conn() as c:
             c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
         await context.bot.send_message(
@@ -264,11 +258,9 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_user_state(user_id, "none")
         return
     
-    # آپدیت post_id توی دیتابیس
     with db.conn() as c:
         c.execute("UPDATE orders SET post_id = ? WHERE id = ?", (post.message_id, order_id))
     
-    # کسر الماس
     remove_coins(user_id, coins, "order_create", f"سفارش #{order_id}")
     update_user(user_id, orders_count=(get_user(user_id)["orders_count"] + 1))
     
@@ -317,7 +309,6 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
     
-    # === چک ۱: کاربر ربات رو استارت کرده؟ ===
     user = get_user(user_id)
     if not user:
         bot_username = (await context.bot.get_me()).username
@@ -327,7 +318,6 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # === چک ۲: سفارش ===
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         if not order:
@@ -434,7 +424,6 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
     
-    # === چک ۱: کاربر ربات رو استارت کرده؟ ===
     user = get_user(user_id)
     if not user:
         bot_username = (await context.bot.get_me()).username
@@ -444,7 +433,6 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # === ثبت گزارش ===
     with db.conn() as c:
         if c.execute("SELECT 1 FROM order_reports WHERE order_id=? AND reporter_id=?", (order_id, user_id)).fetchone():
             await q.answer("❌ قبلاً گزارش داده‌اید.", show_alert=True)
