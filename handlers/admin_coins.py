@@ -39,17 +39,14 @@ async def ac_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ac_deduct(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    set_user_state(q.from_user.id, "ac_deduct_input")
+    set_user_state(q.from_user.id, "ac_search_user", {"mode": "deduct"})
     try:
         await q.message.delete()
     except Exception:
         pass
     await context.bot.send_message(
         q.from_user.id,
-        "📍 لطفا در خط اول ایدی فرد و در خط دوم میزان موجودی را وارد کنید\n\n"
-        "مثال:\n"
-        "267785153\n"
-        "20",
+        "نام کاربری، یوزرنیم یا شناسه کاربری فرد مورد نظر را ارسال فرمایید:",
         reply_markup=back_button()
     )
 
@@ -57,17 +54,100 @@ async def ac_deduct(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ac_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    set_user_state(q.from_user.id, "ac_gift_input")
+    set_user_state(q.from_user.id, "ac_search_user", {"mode": "gift"})
     try:
         await q.message.delete()
     except Exception:
         pass
     await context.bot.send_message(
         q.from_user.id,
-        "📍 لطفا در خط اول ایدی فرد و در خط دوم میزان موجودی را وارد کنید\n\n"
-        "مثال:\n"
-        "267785153\n"
-        "20",
+        "نام کاربری، یوزرنیم یا شناسه کاربری فرد مورد نظر را ارسال فرمایید:",
+        reply_markup=back_button()
+    )
+
+
+# ==================== جستجوی کاربر ====================
+async def handle_search_user(update, context, text, mode):
+    query_clean = text.strip().lstrip("@")
+    
+    if not query_clean:
+        await update.message.reply_text(
+            "❌ کاربر یافت نشد. لطفا دوباره تلاش کنید",
+            reply_markup=back_button()
+        )
+        return
+    
+    with db.conn() as c:
+        if query_clean.isdigit():
+            users = c.execute(
+                "SELECT user_id, first_name, username, coins FROM users WHERE user_id = ?",
+                (int(query_clean),)
+            ).fetchall()
+        else:
+            users = c.execute(
+                "SELECT user_id, first_name, username, coins FROM users WHERE username LIKE ? OR first_name LIKE ?",
+                (f"%{query_clean}%", f"%{query_clean}%")
+            ).fetchall()
+    
+    if not users:
+        await update.message.reply_text(
+            "❌ کاربر یافت نشد. لطفا دوباره تلاش کنید",
+            reply_markup=back_button()
+        )
+        return
+    
+    # نمایش لیست کاربران
+    txt = f"{len(users)} کاربر یافت شد:\n\n"
+    rows = []
+    for i, u in enumerate(users[:10], 1):
+        name = u["first_name"] or "کاربر"
+        username = f"@{u['username']}" if u["username"] else "ندارد"
+        coins = u["coins"] or 0
+        txt += (
+            f"{i}. نام کاربری : {name}\n"
+            f"🆔 یوزرنیم : {username}\n"
+            f"🔰 شماره کاربری : {u['user_id']}\n"
+            f"✅ موجودی : {coins:,}\n\n"
+        )
+        rows.append([
+            (f"👤 {name}", f"ac_pick:{mode}:{u['user_id']}")
+        ])
+    rows.append([("🔙 بازگشت به پنل مدیریت", "ac_back")])
+    
+    await update.message.reply_text(txt, reply_markup=inline(rows))
+
+
+# ==================== انتخاب کاربر ====================
+async def ac_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    parts = q.data.split(":")
+    mode = parts[1]  # gift یا deduct
+    uid = int(parts[2])
+    
+    user = get_user(uid)
+    if not user:
+        await q.answer("❌ کاربر یافت نشد.", show_alert=True)
+        return
+    
+    name = user["first_name"] or "کاربر"
+    
+    set_user_state(q.from_user.id, "ac_amount", {"mode": mode, "target_id": uid})
+    
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    
+    if mode == "deduct":
+        msg = f"شما در حال کسر سکه از {name} هستید\nلطفا مقدار سکه مورد نظر خود را وارد فرمایید :"
+    else:
+        msg = f"شما در حال ارسال سکه به {name} هستید\nلطفا مقدار سکه مورد نظر خود را وارد فرمایید :"
+    
+    await context.bot.send_message(
+        q.from_user.id,
+        msg,
         reply_markup=back_button()
     )
 
@@ -90,60 +170,22 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
     
-    if state == "ac_deduct_input":
-        lines = text.split("\n")
-        if len(lines) < 2:
-            await update.message.reply_text("❌ لطفا در دو خط ارسال کنید.")
-            return True
-        try:
-            target_id = int(lines[0].strip())
-            amount = int(lines[1].strip())
-        except ValueError:
-            await update.message.reply_text("❌ فقط اعداد مجاز هستند.")
-            return True
-        if amount <= 0:
-            await update.message.reply_text("❌ مقدار باید مثبت باشد.")
-            return True
-        
-        target = get_user(target_id)
-        if not target:
-            await update.message.reply_text("❌ کاربر یافت نشد.")
-            set_user_state(user_id, "none")
-            return True
-        
-        success = remove_coins(target_id, amount, "admin_deduct", "کسر توسط مدیریت")
-        set_user_state(user_id, "none")
-        
-        if success:
-            await update.message.reply_text(
-                "✅ کسر موجودی با موفقیت انجام شد",
-                reply_markup=admin_panel()
-            )
-            try:
-                await context.bot.send_message(
-                    target_id,
-                    f'''❗️ تعداد {amount:,} سکه از حساب شما توسط مدیریت کسر شد.'''
-                )
-            except Exception:
-                pass
-        else:
-            await update.message.reply_text(
-                "❌ موجودی کاربر کافی نیست.",
-                reply_markup=admin_panel()
-            )
+    # === جستجوی کاربر ===
+    if state == "ac_search_user":
+        mode = data.get("mode", "gift")
+        await handle_search_user(update, context, text, mode)
         return True
     
-    if state == "ac_gift_input":
-        lines = text.split("\n")
-        if len(lines) < 2:
-            await update.message.reply_text("❌ لطفا در دو خط ارسال کنید.")
+    # === دریافت مقدار ===
+    if state == "ac_amount":
+        if not is_positive_int(text):
+            await update.message.reply_text("❌ فقط عدد مجاز است.")
             return True
-        try:
-            target_id = int(lines[0].strip())
-            amount = int(lines[1].strip())
-        except ValueError:
-            await update.message.reply_text("❌ فقط اعداد مجاز هستند.")
-            return True
+        
+        amount = int(text)
+        target_id = data.get("target_id")
+        mode = data.get("mode")
+        
         if amount <= 0:
             await update.message.reply_text("❌ مقدار باید مثبت باشد.")
             return True
@@ -154,27 +196,23 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             set_user_state(user_id, "none")
             return True
         
-        add_coins(target_id, amount, "admin_gift", "هدیه از طرف مدیریت")
+        name = target["first_name"] or "کاربر"
         
-        # افزایش send-coin-admin
-        with db.conn() as c:
-            c.execute(
-                "UPDATE users SET send_coin_admin = send_coin_admin + ? WHERE user_id = ?",
-                (amount, target_id)
-            )
+        set_user_state(user_id, "ac_confirm", {
+            "mode": mode, "target_id": target_id, "amount": amount
+        })
         
-        set_user_state(user_id, "none")
+        if mode == "deduct":
+            msg = f"آیا از کسر {amount:,} سکه از {name} مطمئن هستید ؟"
+        else:
+            msg = f"آیا از ارسال {amount:,} سکه به {name} مطمئن هستید ؟"
+        
         await update.message.reply_text(
-            "✅ افزایش موجودی با موفقیت انجام شد",
-            reply_markup=admin_panel()
+            msg,
+            reply_markup=inline([
+                [("✅ بله", "ac_confirm_yes"), ("❌ خیر", "ac_back")],
+            ])
         )
-        try:
-            await context.bot.send_message(
-                target_id,
-                f"❗️تعداد {amount:,} سکه از طرف مدیریت به حساب شما واریز شد."
-            )
-        except Exception:
-            pass
         return True
     
     return False
@@ -196,4 +234,84 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "ac_back":
         await ac_back(update, context)
         return True
+    if data.startswith("ac_pick:"):
+        await ac_pick(update, context)
+        return True
+    if data == "ac_confirm_yes":
+        await ac_confirm_yes(update, context)
+        return True
     return False
+
+
+# ==================== تأیید نهایی ====================
+async def ac_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    
+    state, data = get_user_state(user_id)
+    if state != "ac_confirm":
+        return
+    
+    mode = data.get("mode")
+    target_id = data.get("target_id")
+    amount = data.get("amount")
+    
+    target = get_user(target_id)
+    if not target:
+        await q.message.reply_text("❌ کاربر یافت نشد.")
+        set_user_state(user_id, "none")
+        return
+    
+    name = target["first_name"] or "کاربر"
+    
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    
+    if mode == "deduct":
+        success = remove_coins(target_id, amount, "admin_deduct", "کسر توسط مدیریت")
+        set_user_state(user_id, "none")
+        
+        if success:
+            await context.bot.send_message(
+                user_id,
+                f"✅ {amount:,} سکه از {name} کسر شد.",
+                reply_markup=admin_panel()
+            )
+            try:
+                await context.bot.send_message(
+                    target_id,
+                    f"❗️تعداد {amount:,} سکه از حساب شما توسط مدیریت کسر شد."
+                )
+            except Exception:
+                pass
+        else:
+            await context.bot.send_message(
+                user_id,
+                "❌ موجودی کاربر کافی نیست.",
+                reply_markup=admin_panel()
+            )
+    else:  # gift
+        add_coins(target_id, amount, "admin_gift", "هدیه از طرف مدیریت")
+        
+        with db.conn() as c:
+            c.execute(
+                "UPDATE users SET send_coin_admin = send_coin_admin + ? WHERE user_id = ?",
+                (amount, target_id)
+            )
+        
+        set_user_state(user_id, "none")
+        await context.bot.send_message(
+            user_id,
+            f"✅ {amount:,} سکه به {name} ارسال شد.",
+            reply_markup=admin_panel()
+        )
+        try:
+            await context.bot.send_message(
+                target_id,
+                f"❗️تعداد {amount:,} سکه از طرف مدیریت به حساب شما واریز شد."
+            )
+        except Exception:
+            pass
