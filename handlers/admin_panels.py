@@ -2,7 +2,15 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot_manager import is_admin, set_user_state, get_user_state, set_setting, get_setting
 from utils.keyboards import inline, back_button, admin_panel
-from utils.helpers import is_positive_int
+
+
+def _is_valid_number(text: str) -> bool:
+    """چک میکنه که ورودی عدد صحیح یا اعشاری باشه"""
+    try:
+        float(text.strip())
+        return True
+    except (ValueError, AttributeError):
+        return False
 
 
 async def panels_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,10 +59,10 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     
     if state.startswith("apl_set_"):
         key = state.replace("apl_set_", "")
-        if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
+        if not _is_valid_number(text):
+            await update.message.reply_text("❌ فقط عدد مجاز است (مثلاً: 10 یا 1.5).")
             return True
-        set_setting(f"panel_{key}", text)
+        set_setting(f"panel_{key}", text.strip())
         set_user_state(user_id, "none")
         await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
         return True
