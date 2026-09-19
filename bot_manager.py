@@ -157,7 +157,6 @@ def is_banned(user_id: int) -> bool:
 
 # ==================== اخطار ====================
 def add_warning(user_id: int) -> int:
-    """افزودن اخطار و بازگرداندن تعداد جدید"""
     with db.conn() as c:
         c.execute("UPDATE users SET warnings = warnings + 1 WHERE user_id = ?", (user_id,))
         r = c.execute("SELECT warnings FROM users WHERE user_id = ?", (user_id,)).fetchone()
@@ -178,7 +177,6 @@ def set_setting(key: str, value: str):
 
 # ==================== بررسی عضویت ====================
 async def check_membership(context, channel: str, user_id: int) -> bool:
-    """بررسی عضویت در کانال — بدون خطا"""
     if not channel:
         return True
     try:
@@ -188,7 +186,6 @@ async def check_membership(context, channel: str, user_id: int) -> bool:
         return False
 
 async def check_bot_admin(context, channel: str) -> bool:
-    """بررسی ادمین بودن ربات در کانال"""
     try:
         me = await context.bot.get_me()
         member = await context.bot.get_chat_member(f"@{channel}", me.id)
@@ -196,9 +193,44 @@ async def check_bot_admin(context, channel: str) -> bool:
     except Exception:
         return False
 
-# ==================== پنل ====================
+# ==================== پنل (اصلاح‌شده) ====================
 def get_panel_config(panel_name: str) -> dict:
-    return Config.PANELS.get(panel_name, Config.PANELS["عادی"])
+    """
+    تنظیمات پنل رو برمیگردونه.
+    اول از settings (دیتابیس) میخونه، اگه نبود از Config.PANELS
+    """
+    # پیش‌فرض از Config
+    default_cfg = Config.PANELS.get(panel_name, Config.PANELS["عادی"])
+    result = dict(default_cfg)  # کپی
+    
+    # مپ پنل به کلید توی settings
+    key_map = {
+        "عادی":    "normal",
+        "حرفه ای": "pro",
+        "ویژه":    "vip",
+    }
+    prefix = key_map.get(panel_name, "normal")
+    
+    # خوندن از settings
+    try:
+        # سکه روزانه
+        val = get_setting(f"panel_{prefix}_daily", None)
+        if val is not None:
+            result["daily"] = int(float(val))
+        
+        # سکه عضویت
+        val = get_setting(f"panel_{prefix}_join_coin", None)
+        if val is not None:
+            result["join_coin"] = float(val)
+        
+        # سکه زیرمجموعه
+        val = get_setting(f"panel_{prefix}_invite_coin", None)
+        if val is not None:
+            result["invite_coin"] = int(float(val))
+    except Exception:
+        pass
+    
+    return result
 
 def get_daily_gift(user: dict) -> int:
     return get_panel_config(user["panel"])["daily"]
@@ -218,10 +250,6 @@ def set_bot_power(on: bool):
 
 # ==================== بررسی پاداش زیرمجموعه ====================
 async def check_referral_milestone(context, user_id: int):
-    """
-    وقتی کاربر به آستانه عضویت (ads_joined) رسید،
-    به معرفش الماس هدیه بده — فقط یک بار
-    """
     user = get_user(user_id)
     if not user:
         return
@@ -230,11 +258,9 @@ async def check_referral_milestone(context, user_id: int):
     if not referrer_id:
         return
     
-    # اگه قبلاً پاداش داده شده، برو
     if user.get("referral_rewarded"):
         return
     
-    # چک کن به آستانه رسیده یا نه
     threshold = int(get_setting("referral_join_threshold", str(Config.REFERRAL_JOIN_THRESHOLD)))
     if user.get("ads_joined", 0) < threshold:
         return
@@ -243,7 +269,6 @@ async def check_referral_milestone(context, user_id: int):
     if not referrer:
         return
     
-    # الماس بر اساس پنل معرف
     panel_cfg = get_panel_config(referrer.get("panel", "عادی"))
     invite_coin = panel_cfg["invite_coin"]
     commission_percent = {
@@ -252,23 +277,19 @@ async def check_referral_milestone(context, user_id: int):
         "ویژه": 15,
     }.get(referrer.get("panel", "عادی"), 5)
     
-    # واریز الماس به معرف
     add_coins(
         referrer_id, invite_coin, "referral_commission",
         f"پاداش زیرمجموعه {user_id} بعد از {threshold} عضویت"
     )
     
-    # علامت‌گذاری که پاداش داده شده
     update_user(user_id, referral_rewarded=1)
     
-    # افزایش شمارنده امروز معرف
     with db.conn() as c:
         c.execute(
             "UPDATE users SET referral_today = referral_today + 1 WHERE user_id = ?",
             (referrer_id,)
         )
     
-    # ارسال پیام تبریک به معرف
     try:
         await context.bot.send_message(
             referrer_id,
