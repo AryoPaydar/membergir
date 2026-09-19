@@ -13,7 +13,6 @@ from utils.helpers import (
 )
 
 
-
 # ==================== آیتم‌های ثابت ثبت سفارش ====================
 ORDER_ITEMS = [
     {"key": "item_20",   "members": 20,   "coins": 40},
@@ -25,11 +24,9 @@ ORDER_ITEMS = [
 ]
 
 
-
 # ==================== تابع دریافت سکه عضویت (sync) ====================
 def get_panel_join_coin(panel):
     return Config.PANELS.get(panel, "عادی")["join_coin"]
-
 
 
 # ==================== منوی سفارش ====================
@@ -55,7 +52,6 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text,
         reply_markup=inline(rows)
     )
-
 
 
 # ==================== انتخاب آیتم ====================
@@ -88,16 +84,15 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     })
     
     text = (
-        "✅جهت دریافت ممبر باید ابتدا ربات را ادمین کانال مورد نظر کنید سپس آیدی کانال را ارسال نماییدn"
-        "n"
-        "👈نمونه : @durovn"
-        "n"
-        "📌درصورتی که مشکلی در ادمین کردن ربات دارید دستور زیر را ارسال نماییدn"
+        "✅جهت دریافت ممبر باید ابتدا ربات را ادمین کانال مورد نظر کنید سپس آیدی کانال را ارسال نمایید\n"
+        "\n"
+        "👈نمونه : @durov\n"
+        "\n"
+        "📌درصورتی که مشکلی در ادمین کردن ربات دارید دستور زیر را ارسال نمایید\n"
         "/help"
     )
     
     await q.message.reply_text(text, reply_markup=back_button())
-
 
 
 # ==================== چک معتبر بودن آیدی (فقط با @) ====================
@@ -106,7 +101,6 @@ def is_valid_at_channel(text: str) -> bool:
         return False
     import re
     return bool(re.match(r"^@[a-zA-Z0-9_]{5,32}$", text.strip()))
-
 
 
 # ==================== دریافت کانال ====================
@@ -125,8 +119,8 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     
     if not is_valid_at_channel(text):
         await update.message.reply_text(
-            "❌آیدی ارسالی صحیح نمی باشدn"
-            "n"
+            "❌آیدی ارسالی صحیح نمی باشد\n"
+            "\n"
             "👈نمونه : @durov"
         )
         return True
@@ -135,11 +129,11 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     
     if not await check_bot_admin(context, channel):
         await update.message.reply_text(
-            f"❌ربات ادمین کانال @{channel} نیستn"
-            f"n"
-            f"👈جهت دریافت ممبر باید ابتدا ربات را ادمین کانال مورد نظر کنید سپس آیدی کانال خود را ارسال نماییدn"
-            f"n"
-            f"📌درصورتی که مشکلی در ادمین کردن ربات دارید دستور زیر را ارسال نماییدn"
+            f"❌ربات ادمین کانال @{channel} نیست\n"
+            f"\n"
+            f"👈جهت دریافت ممبر باید ابتدا ربات را ادمین کانال مورد نظر کنید سپس آیدی کانال خود را ارسال نمایید\n"
+            f"\n"
+            f"📌درصورتی که مشکلی در ادمین کردن ربات دارید دستور زیر را ارسال نمایید\n"
             f"/help"
         )
         return True
@@ -148,15 +142,15 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         chat = await context.bot.get_chat(f"@{channel}")
         if chat.type not in ("channel", "supergroup"):
             await update.message.reply_text(
-                "❌آیدی ارسالی صحیح نمی باشدn"
-                "n"
+                "❌آیدی ارسالی صحیح نمی باشد\n"
+                "\n"
                 "👈نمونه : @durov"
             )
             return True
     except Exception:
         await update.message.reply_text(
-            "❌آیدی ارسالی صحیح نمی باشدn"
-            "n"
+            "❌آیدی ارسالی صحیح نمی باشد\n"
+            "\n"
             "👈نمونه : @durov"
         )
         return True
@@ -174,10 +168,10 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     })
     
     post_text = (
-        f"‼️نام کانال : {chat.title}n"
-        f"n"
-        f"📝توضیحات کانال: {chat.description or 'ندارد'}n"
-        f"n"
+        f"‼️نام کانال : {chat.title}\n"
+        f"\n"
+        f"📝توضیحات کانال: {chat.description or 'ندارد'}\n"
+        f"\n"
         f"🆔@{channel}"
     )
     
@@ -196,7 +190,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         ])
     )
     return True
-
 
 
 # ==================== تأیید نهایی سفارش ====================
@@ -229,19 +222,28 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     
+    # 👇 اول سفارش رو توی دیتابیس ثبت کن (با post_id خالی)
+    with db.conn() as c:
+        cur = c.execute("""
+            INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, channel, channel_id, None, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
+        order_id = cur.lastrowid
+    
+    # 👇 حالا پست به کانال با order_id واقعی
     post_text = (
-        f"‼️نام کانال : {channel_title}n"
-        f"n"
-        f"📝توضیحات کانال: {channel_desc}n"
-        f"n"
+        f"‼️نام کانال : {channel_title}\n"
+        f"\n"
+        f"📝توضیحات کانال: {channel_desc}\n"
+        f"\n"
         f"🆔@{channel}"
     )
     
     button = inline([
         [(f"👤 سفارش {members} ممبر", "noop")],
-        [("💰 دریافت سکه", "claim_coin:0")],
+        [("💰 دریافت سکه", f"claim_coin:{order_id}")],
         [("📢 عضویت در کانال", f"https://t.me/{channel}")],
-        [("🚫 گزارش", "report:0")],
+        [("🚫 گزارش", f"report:{order_id}")],
     ])
     
     try:
@@ -251,6 +253,9 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=button
         )
     except Exception as e:
+        # اگه ارسال پست fail شد، سفارش رو حذف کن
+        with db.conn() as c:
+            c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
         await context.bot.send_message(
             user_id,
             f"❌ خطا در ارسال پست: {e}",
@@ -259,27 +264,11 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_user_state(user_id, "none")
         return
     
+    # آپدیت post_id توی دیتابیس
     with db.conn() as c:
-        cur = c.execute("""
-            INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, channel, channel_id, post.message_id, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
-        order_id = cur.lastrowid
+        c.execute("UPDATE orders SET post_id = ? WHERE id = ?", (post.message_id, order_id))
     
-    try:
-        await context.bot.edit_message_reply_markup(
-            chat_id=f"@{Config.ADS_CHANNEL}",
-            message_id=post.message_id,
-            reply_markup=inline([
-                [(f"👤 سفارش {members} ممبر", "noop")],
-                [("💰 دریافت سکه", f"claim_coin:{order_id}")],
-                [("📢 عضویت در کانال", f"https://t.me/{channel}")],
-                [("🚫 گزارش", f"report:{order_id}")],
-            ])
-        )
-    except Exception:
-        pass
-    
+    # کسر الماس
     remove_coins(user_id, coins, "order_create", f"سفارش #{order_id}")
     update_user(user_id, orders_count=(get_user(user_id)["orders_count"] + 1))
     
@@ -288,14 +277,13 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post.message_id}"
     
     success_text = (
-        f"✅سفارش شما با موفقیت ثبت شدn"
-        f"n"
-        f"🔍 کد پیگیری سفارش شما {post.message_id} می باشدn"
-        f" n"
+        f"✅سفارش شما با موفقیت ثبت شد\n"
+        f"\n"
+        f"🔍 کد پیگیری سفارش شما {order_id} می باشد\n"
+        f" \n"
         f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
     )
     
-    # === پیام موفقیت با دکمه شیشه‌ای مشاهده سفارش ===
     await context.bot.send_message(
         user_id,
         success_text,
@@ -304,10 +292,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [("🔍 مشاهده سفارش", post_link)],
         ])
     )
-    
-
-
-
 
 
 # ==================== لغو تأیید ====================
@@ -327,7 +311,6 @@ async def order_confirm_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-
 # ==================== دریافت سکه سفارش ====================
 async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -339,7 +322,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         bot_username = (await context.bot.get_me()).username
         await q.answer(
-            f"برای استفاده از کانال ابتدا ربات زیر را start کنید :n@{bot_username}",
+            f"برای استفاده از کانال ابتدا ربات زیر را start کنید :\n@{bot_username}",
             show_alert=True
         )
         return
@@ -445,7 +428,6 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
 
 
-
 # ==================== گزارش ====================
 async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -457,7 +439,7 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         bot_username = (await context.bot.get_me()).username
         await q.answer(
-            f"برای استفاده از کانال ابتدا ربات زیر را start کنید :n@{bot_username}",
+            f"برای استفاده از کانال ابتدا ربات زیر را start کنید :\n@{bot_username}",
             show_alert=True
         )
         return
@@ -489,10 +471,10 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post_id = o["post_id"]
     
     text = (
-        f"🚫 گزارش جدیدn"
-        f"سفارش #{post_id}n"
-        f"گزارش‌دهنده: <code>{user_id}</code>n"
-        f"سفارش‌دهنده: <code>{order_admin}</code>n"
+        f"🚫 گزارش جدید\n"
+        f"سفارش #{post_id}\n"
+        f"گزارش‌دهنده: <code>{user_id}</code>\n"
+        f"سفارش‌دهنده: <code>{order_admin}</code>\n"
         f"کانال: @{channel}"
     )
     
@@ -514,7 +496,6 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         print(f"Report send error: {e}")
-
 
 
 # ==================== نمایش پروفایل کاربر (برای ادمین) ====================
@@ -544,7 +525,6 @@ async def show_user_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-
 # ==================== حذف گزارش ====================
 async def report_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -565,7 +545,6 @@ async def report_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.delete()
     except Exception:
         pass
-
 
 
 # ==================== روتر callback ====================
