@@ -122,7 +122,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             try:
                 await context.bot.send_message(
                     target_id,
-                    f"❗️تعداد {amount:,} سکه از حساب شما توسط مدیریت کسر شد."
+                    f'''❗️تعداد {amount:,} سکه از حساب شما توسط مدیریت کسر شد.'''
                 )
             except Exception:
                 pass
