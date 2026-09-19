@@ -572,21 +572,18 @@ async def power_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """پردازش state ادمین — True اگه هندل شد"""
     user = update.effective_user
     if not is_admin(user.id):
         return False
     from bot_manager import get_user_state, set_user_state
     state, data = get_user_state(user.id)
-    if not state or state == "none":
+    if state == "none" or not state:
         return False
+    
     msg = update.message
     text = (msg.text or "").strip()
-
-    if text in ("🔙 بازگشت", "🔙 بازگشت به پنل مدیریت", "بازگشت به پنل مدیریت"):
-        set_user_state(user.id, "none")
-        await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
-        return True
-
+    
     if state == "admin_search_id":
         if text == "🔙 بازگشت":
             set_user_state(user.id, "none")
@@ -595,11 +592,15 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         if is_positive_int(text):
             u = get_user(int(text))
             if u:
-                await msg.reply_text(f"👤 <a href='tg://user?id={u['user_id']}'>کاربر {u['user_id']}</a>", parse_mode="HTML")
+                await msg.reply_text(
+                    f"👤 <a href='tg://user?id={u['user_id']}'>کاربر {u['user_id']}</a>",
+                    parse_mode="HTML"
+                )
             else:
                 await msg.reply_text("❌ کاربر یافت نشد.")
             set_user_state(user.id, "none")
             return True
+    
     if state == "admin_warn":
         if text == "🔙 بازگشت":
             set_user_state(user.id, "none")
@@ -622,6 +623,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 await msg.reply_text("❌ کاربر یافت نشد.")
             set_user_state(user.id, "none")
             return True
+    
     if state == "bc_text":
         set_user_state(user.id, "bc_confirm", {**data, "text": text})
         await msg.reply_text(
@@ -631,12 +633,15 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             ])
         )
         return True
+    
     if state == "bc_search_user":
         await handle_bc_user_search(update, context, text)
         return True
+    
     if state == "bc_search_channel":
         await handle_bc_channel_search(update, context, text)
         return True
+    
     return False
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
