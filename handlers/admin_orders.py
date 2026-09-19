@@ -40,6 +40,28 @@ async def aor_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(q.from_user.id, "👑 پنل مدیریت", reply_markup=admin_panel())
 
 
+async def orders_menu_refresh(update, context):
+    """رفرش لیست آیتم‌ها"""
+    q = update.callback_query
+    with db.conn() as c:
+        items = c.execute("SELECT * FROM order_items ORDER BY position").fetchall()
+    
+    rows = []
+    for it in items:
+        rows.append([(f"✏️ {it['name']}", f"aor_edit:{it['key']}")])
+    rows.append([("➕ افزودن آیتم", "aor_add")])
+    rows.append([("🔙 بازگشت به پنل مدیریت", "aor_back")])
+    
+    try:
+        await q.message.edit_text(
+            "💢 تنظیمات آیتم‌های سفارش\n\nآیتم مورد نظر را برای ویرایش انتخاب کنید:",
+            reply_markup=inline(rows)
+        )
+    except Exception:
+        pass
+
+
+# ==================== State Handler ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
     if not is_admin(user_id):
@@ -98,9 +120,82 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("✅ آیتم حذف شد.", reply_markup=admin_panel())
         return True
     
+    # === افزودن آیتم — مرحله ۱: کلید ===
+    if state == "aor_add_key":
+        # چک یکتا بودن
+        with db.conn() as c:
+            existing = c.execute("SELECT 1 FROM order_items WHERE key = ?", (text,)).fetchone()
+        if existing:
+            await update.message.reply_text(
+                "❌ این کلید قبلاً استفاده شده. کلید دیگری وارد کنید:",
+                reply_markup=back_button()
+            )
+            return True
+        
+        set_user_state(user_id, "aor_add_name", {"key": text})
+        await update.message.reply_text(
+            "نام نمایشی برای آیتم جدید وارد کنید (مثل: 👤 500 ممبر):",
+            reply_markup=back_button()
+        )
+        return True
+    
+    # === افزودن آیتم — مرحله ۲: نام ===
+    if state == "aor_add_name":
+        key = data.get("key")
+        set_user_state(user_id, "aor_add_members", {"key": key, "name": text})
+        await update.message.reply_text(
+            "تعداد ممبر این آیتم را وارد کنید (مثل: 500):",
+            reply_markup=back_button()
+        )
+        return True
+    
+    # === افزودن آیتم — مرحله ۳: تعداد ممبر ===
+    if state == "aor_add_members":
+        if not is_positive_int(text):
+            await update.message.reply_text("❌ فقط عدد مجاز است.")
+            return True
+        set_user_state(user_id, "aor_add_coins", {**data, "members": int(text)})
+        await update.message.reply_text(
+            "تعداد سکه (الماس) این آیتم را وارد کنید (مثل: 1000):",
+            reply_markup=back_button()
+        )
+        return True
+    
+    # === افزودن آیتم — مرحله ۴: تعداد سکه (ذخیره نهایی) ===
+    if state == "aor_add_coins":
+        if not is_positive_int(text):
+            await update.message.reply_text("❌ فقط عدد مجاز است.")
+            return True
+        
+        key = data.get("key")
+        name = data.get("name")
+        members = data.get("members")
+        coins = int(text)
+        
+        # موقعیت: آخرین + ۱
+        with db.conn() as c:
+            pos_row = c.execute("SELECT COALESCE(MAX(position), 0) as max_pos FROM order_items").fetchone()
+            new_pos = (pos_row["max_pos"] or 0) + 1
+            c.execute("""
+                INSERT INTO order_items (key, name, members, coins, position)
+                VALUES (?, ?, ?, ?, ?)
+            """, (key, name, members, coins, new_pos))
+        
+        set_user_state(user_id, "none")
+        await update.message.reply_text(
+            f"✅ آیتم جدید اضافه شد:\n\n"
+            f"🔑 کلید: {key}\n"
+            f"📝 نام: {name}\n"
+            f"👥 ممبر: {members}\n"
+            f"💰 سکه: {coins}",
+            reply_markup=admin_panel()
+        )
+        return True
+    
     return False
 
 
+# ==================== Callback Handler ====================
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
@@ -181,24 +276,3 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await aor_back(update, context)
         return True
     return False
-
-
-async def orders_menu_refresh(update, context):
-    """رفرش لیست آیتم‌ها"""
-    q = update.callback_query
-    with db.conn() as c:
-        items = c.execute("SELECT * FROM order_items ORDER BY position").fetchall()
-    
-    rows = []
-    for it in items:
-        rows.append([(f"✏️ {it['name']}", f"aor_edit:{it['key']}")])
-    rows.append([("➕ افزودن آیتم", "aor_add")])
-    rows.append([("🔙 بازگشت به پنل مدیریت", "aor_back")])
-    
-    try:
-        await q.message.edit_text(
-            "💢 تنظیمات آیتم‌های سفارش\n\nآیتم مورد نظر را برای ویرایش انتخاب کنید:",
-            reply_markup=inline(rows)
-        )
-    except Exception:
-        pass
