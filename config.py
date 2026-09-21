@@ -43,7 +43,7 @@ class Config:
     # === تنظیمات لغو سفارش ===
     CANCEL_ENABLED = True
     CANCEL_MIN_MEMBERS = 100
-    CANCEL_WAIT_SECONDS = 60
+    CANCEL_WAIT_SECONDS = 0
     CANCEL_REFUND_RATIO = 0.5
     
     # === تنظیمات ترک کانال ===
