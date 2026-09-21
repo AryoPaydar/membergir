@@ -25,6 +25,8 @@ class Config:
     DEFAULT_PANEL = "عادی"
     MAX_WARNINGS = 3
     DAILY_GIFT_COOLDOWN = 86400
+    HOURLY_GIFT_COOLDOWN = 1800
+    HOURLY_GIFT_AMOUNT = 1
     
     # === پنل‌ها ===
     PANELS = {
@@ -66,7 +68,6 @@ def _validate_config():
     """بررسی متغیرهای حیاتی — اگه نبودن، خطای واضح بده"""
     errors = []
     
-    # === BOT_TOKEN ===
     if not Config.BOT_TOKEN:
         errors.append(
             "❌ BOT_TOKEN تنظیم نشده!\n"
@@ -93,7 +94,6 @@ def _validate_config():
             "   → توکن باید شکل: 123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         )
     
-    # === ADMIN_ID ===
     if Config.ADMIN_ID == 0:
         errors.append(
             "❌ ADMIN_ID تنظیم نشده یا صفر است!\n"
@@ -107,7 +107,6 @@ def _validate_config():
             "   → از @userinfobot دوباره بگیر"
         )
     
-    # اگه خطا بود، چاپ کن و بترکون
     if errors:
         print("=" * 70)
         print("🚨 خطا در تنظیمات ربات:")
@@ -124,7 +123,6 @@ def _validate_config():
         print("=" * 70)
         raise SystemExit(1)
     
-    # اگه همه چیز اوکی بود
     print("=" * 70)
     print("✅ تنظیمات با موفقیت بارگذاری شد")
     print(f"   🤖 Bot: @{Config.BOT_USERNAME}")
