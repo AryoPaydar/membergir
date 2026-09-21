@@ -34,7 +34,7 @@ USER_BUTTONS = {
     "📋 پیگیری سفارش": orders_history.tracking_menu,
     "🚀 ارتقا پنل": panel.panel_menu,
     "🏆 برترین‌ها": top.top_menu,
-    "📜 تاریخچه تراکنش": history.history_menu,
+    "🏦 بانک انتقال": history.history_menu,
 }
 
 ADMIN_BUTTONS = {
@@ -103,7 +103,7 @@ async def on_message(update: Update, context):
         logger.info(f"✅ Created user {user_tg.id}")
     
     # ۱. State کاربر
-    for module in (gift, ads, transfer, referral, shop, panel, orders_history):
+    for module in (history, gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             try:
                 if await module.handle_state(update, context):
@@ -150,7 +150,21 @@ async def on_message(update: Update, context):
         
         logger.info(f"❌ No admin handler for: '{text}'")
     
-    # ۳. دکمه‌های کاربر
+    # ۳. دکمه‌های بانک (برای همه کاربران)
+    if text == "💎 انتقال الماس":
+        await history.transfer_start(update, context)
+        return
+    if text == "📥 تاریخچه دریافت":
+        await history.history_received(update, context)
+        return
+    if text == "📤 تاریخچه انتقال":
+        await history.history_sent(update, context)
+        return
+    if text == "🔙 بازگشت به منوی اصلی":
+        await user.back_to_menu(update, context)
+        return
+    
+    # ۴. دکمه‌های کاربر
     if text in USER_BUTTONS:
         try:
             await USER_BUTTONS[text](update, context)
@@ -183,14 +197,15 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
     
-    # 👇 orders_history اول از همه
+    # 👇 orders_history و history اول
     modules = [
+        history,
         orders_history,
         gift, ads, user, admin,
         admin_coins, admin_user_info, admin_complete, admin_channels,
         admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
         transfer, referral, shop, panel, top,
-        admin_shop, admin_texts, history,
+        admin_shop, admin_texts,
     ]
     for module in modules:
         if hasattr(module, "handle_callback"):
