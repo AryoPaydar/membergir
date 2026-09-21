@@ -11,6 +11,7 @@ from utils.keyboards import main_menu, back_button, inline
 from utils.texts import start_text, account_text
 from utils.helpers import now_ts, jalali_now
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
@@ -62,6 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu(is_admin(user.id))
     )
 
+
 async def check_force_join(context, user_id):
     missing = []
     for ch in (Config.FORCE_CHANNEL_1, Config.FORCE_CHANNEL_2):
@@ -84,6 +86,7 @@ async def check_force_join(context, user_id):
         reply_markup=InlineKeyboardMarkup(buttons)
     )
     return False
+
 
 async def handle_referral_join(context, referrer_id, new_user_id):
     referrer = get_user(referrer_id)
@@ -123,6 +126,7 @@ async def handle_referral_join(context, referrer_id, new_user_id):
         except Exception:
             pass
 
+
 async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(update.effective_user.id)
     if not user:
@@ -132,8 +136,12 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = account_text(user)
     await update.message.reply_text(
         text, parse_mode="HTML",
-        reply_markup=inline([[("🔗 اشتراک آیدی من", f"share_id")]])
+        reply_markup=inline([
+            [("🎊 دریافت هدیه ساعتی", "hourly_gift_claim")],
+            [("🔗 اشتراک آیدی من", "share_id")],
+        ])
     )
+
 
 async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(update.effective_user.id)
@@ -171,6 +179,7 @@ async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML",
         reply_markup=keyboard
     )
+
 
 async def daily_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -212,12 +221,56 @@ async def daily_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
         show_alert=True
     )
 
+
+async def hourly_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    user_id = q.from_user.id
+    user = get_user(user_id)
+    if not user:
+        await q.answer("❌ لطفاً ابتدا /start را بزنید.", show_alert=True)
+        return
+    
+    now = now_ts()
+    cooldown = Config.HOURLY_GIFT_COOLDOWN
+    last_hourly = user.get("last_hourly") or 0
+    next_time = last_hourly + cooldown
+    
+    if now < next_time:
+        remaining = next_time - now
+        minutes = remaining // 60
+        seconds = remaining % 60
+        await q.answer(
+            f"⏳ زمان باقی‌مانده: {minutes} دقیقه و {seconds} ثانیه",
+            show_alert=True
+        )
+        return
+    
+    amount = Config.HOURLY_GIFT_AMOUNT
+    add_coins(user_id, amount, "hourly_gift", "هدیه ساعتی")
+    update_user(
+        user_id,
+        last_hourly=now,
+        hourly_earned=(user.get("hourly_earned", 0) + amount)
+    )
+    
+    new_user = get_user(user_id)
+    new_balance = new_user.get("coins", 0)
+    
+    await q.answer(
+        f"🎉 تبریک!\n"
+        f"💰 {amount} سکه هدیه ساعتی دریافت کردید.\n"
+        f"💳 موجودی جدید: {new_balance:,}",
+        show_alert=True
+    )
+
+
 async def go_to_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     
     from handlers import shop
     await shop.shop_menu_from_callback(update, context)
+
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -227,6 +280,7 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu(is_admin(user.id))
     )
 
+
 async def share_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -235,6 +289,7 @@ async def share_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🆔 آیدی عددی شما:\n<code>{user_id}</code>",
         parse_mode="HTML"
     )
+
 
 async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -255,6 +310,7 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await q.answer("❌ هنوز عضو نشده‌اید!", show_alert=True)
 
+
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
@@ -268,6 +324,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "daily_gift_claim":
         await daily_gift_claim(update, context)
         return True
+    if data == "hourly_gift_claim":
+        await hourly_gift_claim(update, context)
+        return True
     if data == "go_to_shop":
         await go_to_shop(update, context)
         return True
@@ -279,6 +338,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
     return False
+
 
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """این ماژول state ندارد — ولی gift state رو پاس میدیم."""
