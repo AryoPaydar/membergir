@@ -1,342 +1,274 @@
-from telegram import Update
-from telegram.ext import ContextTypes
-from database import db
-from bot_manager import get_user, is_admin, get_setting
-from utils.keyboards import inline
-from utils.helpers import format_number
+import sqlite3
+from contextlib import contextmanager
+from config import Config
 
-# ==================== منوی پیگیری ====================
-async def tracking_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📋 بخش پیگیری سفارشات\n\nگزینه مورد نظر را انتخاب کنید:",
-        reply_markup=inline([
-            [("📌 سفارشات من", "my_orders")],
-            [("🛍 سفارشات در حال اجرا", "my_running_orders")],
-            [("❌ لغو سفارش", "cancel_order_menu")],
-            [("📜 قوانین", "rules")],
-        ])
-    )
+class Database:
+    def __init__(self, path=None):
+        self.path = path or Config.DB_PATH
+        self._init_db()
+    
+    @contextmanager
+    def conn(self):
+        """Context manager برای اتصال امن به دیتابیس"""
+        connection = sqlite3.connect(self.path, timeout=10)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+    
+    def _init_db(self):
+        """ساخت جداول در اولین اجرا"""
+        with self.conn() as c:
+            # === کاربران ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id         INTEGER PRIMARY KEY,
+                    first_name      TEXT,
+                    username        TEXT,
+                    phone           TEXT,
+                    coins           INTEGER DEFAULT 10,
+                    panel           TEXT DEFAULT 'عادی',
+                    panel_days      INTEGER DEFAULT 0,
+                    panel_start     DATE,
+                    warnings        INTEGER DEFAULT 0,
+                    banned          INTEGER DEFAULT 0,
+                    referrer_id     INTEGER,
+                    join_date       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_daily      INTEGER DEFAULT 0,
+                    ads_joined      INTEGER DEFAULT 0,
+                    orders_count    INTEGER DEFAULT 0,
+                    received_coins  INTEGER DEFAULT 0,
+                    sent_coins      INTEGER DEFAULT 0,
+                    state           TEXT DEFAULT 'none',
+                    state_data      TEXT,
+                    total_earned    INTEGER DEFAULT 0,
+                    total_spent     INTEGER DEFAULT 0,
+                    today_earned    INTEGER DEFAULT 0,
+                    today_date      TEXT,
+                    referral_today  INTEGER DEFAULT 0,
+                    referral_rewarded INTEGER DEFAULT 0,
+                    send_coin_admin INTEGER DEFAULT 0,
+                    last_hourly     INTEGER DEFAULT 0,
+                    hourly_earned   INTEGER DEFAULT 0
+                )
+            """)
+            
+            # === اضافه کردن ستون‌های جدید به دیتابیس موجود ===
+            existing_columns = [row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()]
+            new_columns = {
+                "total_earned": "INTEGER DEFAULT 0",
+                "total_spent": "INTEGER DEFAULT 0",
+                "today_earned": "INTEGER DEFAULT 0",
+                "today_date": "TEXT",
+                "referral_today": "INTEGER DEFAULT 0",
+                "referral_rewarded": "INTEGER DEFAULT 0",
+                "send_coin_admin": "INTEGER DEFAULT 0",
+                "last_hourly": "INTEGER DEFAULT 0",
+                "hourly_earned": "INTEGER DEFAULT 0",
+            }
+            for col, col_type in new_columns.items():
+                if col not in existing_columns:
+                    try:
+                        c.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+                    except Exception:
+                        pass
+            
+            # === سفارشات ممبر ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS orders (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    admin_id        INTEGER NOT NULL,
+                    channel         TEXT NOT NULL,
+                    channel_id      INTEGER,
+                    post_id         INTEGER,
+                    member_target   INTEGER NOT NULL,
+                    member_received INTEGER DEFAULT 0,
+                    coins_cost      INTEGER NOT NULL,
+                    status          TEXT DEFAULT 'running',
+                    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    cancel_at       INTEGER,
+                    FOREIGN KEY (admin_id) REFERENCES users(user_id)
+                )
+            """)
+            
+            # === اعضای سفارش ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS order_members (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_id    INTEGER NOT NULL,
+                    user_id     INTEGER NOT NULL,
+                    joined_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    left_at     TIMESTAMP,
+                    UNIQUE(order_id, user_id),
+                    FOREIGN KEY (order_id) REFERENCES orders(id)
+                )
+            """)
+            
+            # === گزارشات سفارش ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS order_reports (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_id    INTEGER NOT NULL,
+                    reporter_id INTEGER NOT NULL,
+                    reason      TEXT,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(order_id, reporter_id)
+                )
+            """)
+            
+            # === تراکنش‌ها ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    from_id     INTEGER,
+                    to_id       INTEGER,
+                    amount      INTEGER NOT NULL,
+                    type        TEXT NOT NULL,
+                    description TEXT,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # === کدهای هدیه ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS gift_codes (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code                TEXT NOT NULL,
+                    amount              INTEGER NOT NULL,
+                    max_users           INTEGER DEFAULT 1,
+                    used_count          INTEGER DEFAULT 0,
+                    post_id             INTEGER,
+                    post_success_id     INTEGER,
+                    type                TEXT DEFAULT 'global',
+                    target_user_id      INTEGER,
+                    created_by          INTEGER,
+                    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active           INTEGER DEFAULT 1
+                )
+            """)
+            
+            # === اضافه کردن ستون‌های جدید به gift_codes ===
+            gift_cols = [r[1] for r in c.execute("PRAGMA table_info(gift_codes)").fetchall()]
+            if "id" not in gift_cols:
+                c.execute("DROP TABLE IF EXISTS gift_codes")
+                c.execute("""
+                    CREATE TABLE gift_codes (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        code                TEXT NOT NULL,
+                        amount              INTEGER NOT NULL,
+                        max_users           INTEGER DEFAULT 1,
+                        used_count          INTEGER DEFAULT 0,
+                        post_id             INTEGER,
+                        post_success_id     INTEGER,
+                        type                TEXT DEFAULT 'global',
+                        target_user_id      INTEGER,
+                        created_by          INTEGER,
+                        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active           INTEGER DEFAULT 1
+                    )
+                """)
+            
+            # === دریافت‌کنندگان کد هدیه ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS gift_code_users (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code_id     INTEGER NOT NULL,
+                    user_id     INTEGER NOT NULL,
+                    used_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(code_id, user_id),
+                    FOREIGN KEY (code_id) REFERENCES gift_codes(id)
+                )
+            """)
+            
+            # === تنظیمات فروشگاه ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS shop_items (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_type   TEXT NOT NULL,
+                    name        TEXT,
+                    price       INTEGER,
+                    coin_amount INTEGER,
+                    panel_name  TEXT,
+                    panel_days  INTEGER,
+                    position    INTEGER
+                )
+            """)
+            
+            # === آیتم‌های سفارش ممبر ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS order_items (
+                    key         TEXT PRIMARY KEY,
+                    name        TEXT,
+                    members     INTEGER,
+                    coins       INTEGER,
+                    position    INTEGER
+                )
+            """)
+            
+            # === اضافه کردن پیش‌فرض‌های order_items ===
+            default_items = [
+                ("item_20",  "👤 20 ممبر",   20,  40,  1),
+                ("item_10",  "👤 10 ممبر",   10,  20,  2),
+                ("item_100", "👤 100 ممبر",  100, 200, 3),
+                ("item_50",  "👤 50 ممبر",   50,  100, 4),
+                ("item_400", "👤 400 ممبر",  400, 800, 5),
+                ("item_200", "👤 200 ممبر",  200, 400, 6),
+            ]
+            for key, name, members, coins, pos in default_items:
+                c.execute("""
+                    INSERT OR IGNORE INTO order_items (key, name, members, coins, position)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (key, name, members, coins, pos))
+            
+            # === متن‌ها و تنظیمات ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key         TEXT PRIMARY KEY,
+                    value       TEXT
+                )
+            """)
+            
+            # === مدیران ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS admins (
+                    user_id     INTEGER PRIMARY KEY,
+                    added_by    INTEGER,
+                    added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # === کانال‌ها و گروه‌های ربات ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS bot_chats (
+                    chat_id     INTEGER PRIMARY KEY,
+                    chat_type   TEXT,
+                    title       TEXT,
+                    username    TEXT,
+                    added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # === ایندکس‌ها ===
+            c.execute("CREATE INDEX IF NOT EXISTS idx_orders_admin ON orders(admin_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_tx_from ON transactions(from_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_tx_to ON transactions(to_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_users_ref ON users(referrer_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_code_id ON gift_code_users(code_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_user_id ON gift_code_users(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_active ON gift_codes(is_active)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gift_type ON gift_codes(type)")
+            
+            # === ادمین اصلی ===
+            c.execute(
+                "INSERT OR IGNORE INTO admins (user_id) VALUES (?)",
+                (Config.ADMIN_ID,)
+            )
 
-# ==================== سفارشات من ====================
-async def my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    
-    with db.conn() as c:
-        orders = c.execute("""
-            SELECT o.*, 
-                   (SELECT COUNT(*) FROM order_members om WHERE om.order_id = o.id AND om.left_at IS NULL) as active_members
-            FROM orders o
-            WHERE o.admin_id = ?
-            ORDER BY o.id DESC
-            LIMIT 20
-        """, (user_id,)).fetchall()
-    
-    if not orders:
-        await q.message.reply_text(
-            "📭 هنوز سفارشی ثبت نکرده‌اید.",
-            reply_markup=inline([[("🔙 بازگشت", "tracking_back")]])
-        )
-        return
-    
-    text = "📋 <b>سفارشات اخیر شما:</b>\n\n"
-    for o in orders:
-        status_emoji = {
-            "running": "♻️",
-            "completed": "✅",
-            "cancelled": "❌",
-        }.get(o["status"], "❓")
-        
-        text += (
-            f"{status_emoji} <b>سفارش #{o['id']}</b>\n"
-            f"📢 کانال: @{o['channel']}\n"
-            f"👥 ممبر: {o['member_received']}/{o['member_target']}\n"
-            f"💰 هزینه: {o['coins_cost']:,} سکه\n"
-            f"📆 تاریخ: {o['created_at']}\n"
-            f"——————\n"
-        )
-    
-    rows = []
-    for o in orders[:10]:
-        rows.append([(f"#{o['id']} - @{o['channel']}", f"order_detail:{o['id']}")])
-    rows.append([("🔙 بازگشت", "tracking_back")])
-    
-    await q.message.reply_text(text, parse_mode="HTML", reply_markup=inline(rows))
-
-# ==================== جزئیات سفارش ====================
-async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    order_id = int(q.data.split(":")[1])
-    
-    with db.conn() as c:
-        order = c.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
-        if not order:
-            await q.message.reply_text("❌ سفارش یافت نشد.")
-            return
-        order = dict(order)
-        
-        # فقط صاحب سفارش یا ادمین
-        if order["admin_id"] != user_id and not is_admin(user_id):
-            await q.message.reply_text("❌ دسترسی ندارید.")
-            return
-        
-        # اعضای فعال
-        active = c.execute(
-            "SELECT COUNT(*) c FROM order_members WHERE order_id=? AND left_at IS NULL",
-            (order_id,)
-        ).fetchone()["c"]
-        
-        left = c.execute(
-            "SELECT COUNT(*) c FROM order_members WHERE order_id=? AND left_at IS NOT NULL",
-            (order_id,)
-        ).fetchone()["c"]
-    
-    status_text = {
-        "running": "♻️ در حال اجرا",
-        "completed": "✅ تکمیل شده",
-        "cancelled": "❌ لغو شده",
-    }.get(order["status"], "❓")
-    
-    text = (
-        f"📋 <b>جزئیات سفارش #{order_id}</b>\n\n"
-        f"📢 کانال: @{order['channel']}\n"
-        f"👥 ممبر درخواستی: {order['member_target']}\n"
-        f"✅ ممبر دریافتی: {order['member_received']}\n"
-        f"🟢 اعضای فعال: {active}\n"
-        f"🔴 اعضای ترک‌کرده: {left}\n"
-        f"💰 هزینه: {order['coins_cost']:,} سکه\n"
-        f"📆 تاریخ ثبت: {order['created_at']}\n"
-        f"📊 وضعیت: {status_text}\n"
-    )
-    
-    rows = []
-    if order["status"] == "running":
-        if get_setting("cancel_enabled", "on") == "on":
-            rows.append([("❌ لغو سفارش", f"cancel_confirm:{order_id}")])
-    rows.append([("🔙 بازگشت", "my_orders")])
-    
-    await q.message.reply_text(text, parse_mode="HTML", reply_markup=inline(rows))
-
-# ==================== سفارشات در حال اجرا ====================
-async def my_running_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    
-    with db.conn() as c:
-        orders = c.execute("""
-            SELECT * FROM orders
-            WHERE admin_id = ? AND status = 'running'
-            ORDER BY id DESC
-        """, (user_id,)).fetchall()
-    
-    if not orders:
-        await q.message.reply_text(
-            "📭 سفارش در حال اجرایی ندارید.",
-            reply_markup=inline([[("🔙 بازگشت", "tracking_back")]])
-        )
-        return
-    
-    text = "🛍 <b>سفارشات در حال اجرا:</b>\n\n"
-    for o in orders:
-        remaining = o["member_target"] - o["member_received"]
-        text += (
-            f"♻️ <b>#{o['id']}</b> - @{o['channel']}\n"
-            f"👥 باقی‌مانده: {remaining}/{o['member_target']}\n"
-            f"——————\n"
-        )
-    
-    rows = [[(f"#{o['id']}", f"order_detail:{o['id']}")] for o in orders[:10]]
-    rows.append([("🔙 بازگشت", "tracking_back")])
-    await q.message.reply_text(text, parse_mode="HTML", reply_markup=inline(rows))
-
-# ==================== لغو سفارش ====================
-async def cancel_order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    
-    if get_setting("cancel_enabled", "on") != "on":
-        await q.message.reply_text("❌ لغو سفارش غیرفعال است.")
-        return
-    
-    min_members = int(get_setting("cancel_min_members", "100"))
-    
-    with db.conn() as c:
-        orders = c.execute("""
-            SELECT * FROM orders
-            WHERE admin_id = ? AND status = 'running' AND member_target >= ?
-            ORDER BY id DESC
-        """, (user_id, min_members)).fetchall()
-    
-    if not orders:
-        await q.message.reply_text(
-            f"❌ سفارشی برای لغو یافت نشد.\n\n"
-            f"👈 حداقل ممبر برای لغو: {min_members}",
-            reply_markup=inline([[("🔙 بازگشت", "tracking_back")]])
-        )
-        return
-    
-    rows = [[(f"#{o['id']} - @{o['channel']}", f"cancel_confirm:{o['id']}")] for o in orders[:10]]
-    rows.append([("🔙 بازگشت", "tracking_back")])
-    await q.message.reply_text("❌ سفارش مورد نظر برای لغو:", reply_markup=inline(rows))
-
-async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    order_id = int(q.data.split(":")[1])
-    
-    with db.conn() as c:
-        order = c.execute("SELECT * FROM orders WHERE id=? AND admin_id=?", (order_id, user_id)).fetchone()
-    if not order:
-        await q.message.reply_text("❌ سفارش یافت نشد.")
-        return
-    
-    order = dict(order)
-    if order["status"] != "running":
-        await q.message.reply_text("❌ این سفارش فعال نیست.")
-        return
-    
-    if get_setting("cancel_enabled", "on") != "on":
-        await q.message.reply_text("❌ لغو سفارش غیرفعال است.")
-        return
-    
-    # چک زمان انتظار
-    from utils.helpers import now_ts
-    cancel_at = order.get("cancel_at") or 0
-    if now_ts() < cancel_at:
-        remaining = cancel_at - now_ts()
-        await q.answer(f"⏳ {remaining} ثانیه دیگر می‌توانید لغو کنید.", show_alert=True)
-        return
-    
-    # محاسبه بازگشت
-    ratio = float(get_setting("cancel_refund_ratio", "0.5"))
-    remaining = order["member_target"] - order["member_received"]
-    refund = int(remaining * ratio)
-    
-    await q.message.reply_text(
-        f"⁉️ آیا از لغو سفارش <b>#{order_id}</b> مطمئن هستید؟\n\n"
-        f"👥 ممبر باقی‌مانده: {remaining}\n"
-        f"💰 سکه بازگشتی: {refund:,}",
-        parse_mode="HTML",
-        reply_markup=inline([
-            [("✅ بله، لغو کن", f"cancel_do:{order_id}"),
-             ("❌ خیر", "tracking_back")],
-        ])
-    )
-
-async def cancel_order_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    user_id = q.from_user.id
-    order_id = int(q.data.split(":")[1])
-    
-    with db.conn() as c:
-        order = c.execute("SELECT * FROM orders WHERE id=? AND admin_id=?", (order_id, user_id)).fetchone()
-        if not order:
-            await q.answer("❌ یافت نشد.", show_alert=True)
-            return
-        order = dict(order)
-        if order["status"] != "running":
-            await q.answer("❌ قبلاً بسته شده.", show_alert=True)
-            return
-        
-        ratio = float(get_setting("cancel_refund_ratio", "0.5"))
-        remaining = order["member_target"] - order["member_received"]
-        refund = int(remaining * ratio)
-        
-        # بستن سفارش + بازگشت سکه — اتمیک
-        c.execute("UPDATE orders SET status='cancelled' WHERE id=?", (order_id,))
-        c.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (refund, user_id))
-        c.execute("""
-            INSERT INTO transactions (to_id, amount, type, description)
-            VALUES (?, ?, 'order_cancel_refund', ?)
-        """, (user_id, refund, f"بازگشت از سفارش #{order_id}"))
-    
-    # حذف پست از کانال
-    try:
-        from config import Config
-        await context.bot.delete_message(f"@{Config.ADS_CHANNEL}", order["post_id"])
-    except Exception:
-        pass
-    
-    await q.answer(f"✅ سفارش لغو شد. {refund:,} سکه بازگشت.", show_alert=True)
-    try:
-        await q.message.delete()
-    except Exception:
-        pass
-    
-    from utils.keyboards import main_menu
-    await context.bot.send_message(
-        user_id,
-        f"✅ سفارش #{order_id} با موفقیت لغو شد.\n"
-        f"💰 {refund:,} سکه به حساب شما بازگشت.",
-        reply_markup=main_menu(is_admin(user_id))
-    )
-
-# ==================== قوانین ====================
-async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    text = get_setting("rules_text",
-        "📜 <b>قوانین ربات:</b>\n\n"
-        "۱. استفاده از ربات به معنی پذیرش قوانین است.\n"
-        "۲. هرگونه تخلف منجر به مسدودیت می‌شود.\n"
-        "۳. مسئولیت اطلاعات وارد شده بر عهده کاربر است."
-    )
-    await q.message.reply_text(
-        text, parse_mode="HTML",
-        reply_markup=inline([[("🔙 بازگشت", "tracking_back")]])
-    )
-
-async def tracking_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    try:
-        await q.message.delete()
-    except Exception:
-        pass
-    
-    from utils.keyboards import main_menu
-    await context.bot.send_message(
-        q.from_user.id,
-        "🏠 منوی اصلی",
-        reply_markup=main_menu(is_admin(q.from_user.id))
-    )
-
-# ==================== روتر callback ====================
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    q = update.callback_query
-    data = q.data
-    
-    handlers = {
-        "my_orders": my_orders,
-        "my_running_orders": my_running_orders,
-        "cancel_order_menu": cancel_order_menu,
-        "rules": rules,
-        "tracking_back": tracking_back,
-    }
-    if data in handlers:
-        await handlers[data](update, context)
-        return True
-    if data.startswith("order_detail:"):
-        await order_detail(update, context)
-        return True
-    if data.startswith("cancel_confirm:"):
-        await cancel_order_confirm(update, context)
-        return True
-    if data.startswith("cancel_do:"):
-        await cancel_order_do(update, context)
-        return True
-    return False
-
-# ==================== State Handler ====================
-async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """
-    این ماژول state ندارد — همه کارها با callback انجام میشود.
-    این تابع برای یکپارچگی با main.py تعریف شده است.
-    """
-    return False
+db = Database()
