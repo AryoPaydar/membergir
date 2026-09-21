@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import db
 from bot_manager import get_user, is_admin, get_setting
-from utils.keyboards import inline, main_menu, back_button
+from utils.keyboards import inline, main_menu
 from utils.helpers import format_number, now_ts
 from datetime import datetime
 import jdatetime
@@ -199,5 +199,5 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 # ==================== State Handler ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """این ماژول state ندارد."""
+    """این ماژول state ندارد — همه کارها با callback انجام می‌شود."""
     return False
