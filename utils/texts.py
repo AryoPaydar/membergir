@@ -9,7 +9,7 @@ def start_text(first_name, user_id):
 
 def account_text(user: dict):
     from database import db
-    from utils.helpers import jalali_now
+    from utils.helpers import jalali_now, now_ts
     import jdatetime
     from datetime import datetime
     
@@ -45,7 +45,7 @@ def account_text(user: dict):
     total_earned = user.get("total_earned", 0)
     total_spent = user.get("total_spent", 0)
     
-    # ==== هدیه مدیریت ====
+    # ==== هدیه مدیریت + زیرمجموعه ====
     with db.conn() as c:
         gift_row = c.execute("""
             SELECT COALESCE(SUM(amount), 0) as total
@@ -59,9 +59,25 @@ def account_text(user: dict):
             "SELECT COUNT(*) c FROM users WHERE referrer_id = ?", (user_id,)
         ).fetchone()["c"]
         
-        ref_today = c.execute("""
+        # امروز - بر اساس تاریخ شمسی
+        today_jalali = today
+        ref_today = 0
+        refs = c.execute(
+            "SELECT join_date FROM users WHERE referrer_id = ?", (user_id,)
+        ).fetchall()
+        for r in refs:
+            try:
+                dt = datetime.strptime(str(r["join_date"])[:19], "%Y-%m-%d %H:%M:%S")
+                jd = jdatetime.date.fromgregorian(date=dt.date()).strftime("%Y/%m/%d")
+                if jd == today_jalali:
+                    ref_today += 1
+            except Exception:
+                pass
+        
+        # زیرمجموعه تأیید شده (ads_joined >= 3)
+        ref_verified = c.execute("""
             SELECT COUNT(*) c FROM users
-            WHERE referrer_id = ? AND DATE(join_date) = DATE('now')
+            WHERE referrer_id = ? AND ads_joined >= 3
         """, (user_id,)).fetchone()["c"]
         
         commission_row = c.execute("""
@@ -71,34 +87,49 @@ def account_text(user: dict):
         """, (user_id,)).fetchone()
         inv_commission = commission_row["total"] if commission_row else 0
     
-    ads_joined = user.get("ads_joined", 0)
+    # ==== هدیه ساعتی ====
+    hourly_earned = user.get("hourly_earned", 0)
+    last_hourly = user.get("last_hourly", 0)
+    now = now_ts()
+    cooldown = Config.HOURLY_GIFT_COOLDOWN
+    next_hourly = last_hourly + cooldown
+    if now < next_hourly:
+        remaining = next_hourly - now
+        minutes = remaining // 60
+        seconds = remaining % 60
+        time_left = f"{minutes} دقیقه و {seconds} ثانیه"
+    else:
+        time_left = "آماده دریافت ✅"
+    
     coins = user.get("coins", 0)
     
     text = (
-        f"🗣 نام کاربری : <b>{first_name}</b>\n"
+        f"🔰 نام کاربری : <b>{first_name}</b>\n"
         f"🆔 یوزرنیم : {username_display}\n"
-        f"🔰 شماره کاربری : <code>{user_id}</code>\n"
-        f"📉 موجودی مصرفی : {total_spent:,}\n"
+        f"🫆 شماره کاربری : <code>{user_id}</code>\n"
         f"📆 تاریخ عضویت : {join_date_jalali}\n"
-        f"♻️ نوع پنل : {panel}\n"
+        f"🏵 نوع پنل : {panel}\n"
         f"💎 حساب کاربری : {verify_status}\n"
-        f"\n"
         f"⚠️ اخطار : {warnings} از {max_warn}\n"
-        f"🔷 مجموع موجودی کسب شده : {total_earned:,}\n"
-        f"🔹 موجودی کسب شده در امروز : {today_earned:,}\n"
+        f"\n"
+        f"📊 مجموع موجودی کسب شده : {total_earned:,}\n"
+        f"📈 موجودی کسب شده در امروز : {today_earned:,}\n"
+        f"📉 مجموع موجودی مصرفی : {total_spent:,}\n"
         f"🎁 هدیه مدیریت : {admin_gift:,}\n"
+        f"🎊 هدیه ساعتی : {hourly_earned:,}\n"
+        f"⏳ زمان باقی مانده هدیه ساعتی : {time_left}\n"
         f"\n"
         f"💳 <b>انتقالات</b>\n"
         f"📥 دریافتی : {user.get('received_coins', 0):,}\n"
         f"📤 واریزی : {user.get('sent_coins', 0):,}\n"
         f"\n"
         f"👥 <b>زیر مجموعه ها</b>\n"
-        f"✔️ مجموع : {ref_total:,}\n"
-        f"✔️ امروز : {ref_today:,}\n"
-        f"✔️ تعداد عضویت : {ads_joined:,}\n"
-        f"✔️ پورسانت دریافتی : {inv_commission:,}\n"
+        f"⚜️ مجموع : {ref_total:,}\n"
+        f"🔆 امروز : {ref_today:,}\n"
+        f"💯 زیرمجموعه تایید شده : {ref_verified:,}\n"
+        f"💳 پورسانت دریافتی : {inv_commission:,}\n"
         f"\n"
-        f"✅ موجودی : <b>{coins:,}</b>"
+        f"💰 موجودی : <b>{coins:,}</b>"
     )
     
     return text
