@@ -53,7 +53,9 @@ class Database:
                     today_date      TEXT,
                     referral_today  INTEGER DEFAULT 0,
                     referral_rewarded INTEGER DEFAULT 0,
-                    send_coin_admin INTEGER DEFAULT 0
+                    send_coin_admin INTEGER DEFAULT 0,
+                    last_hourly     INTEGER DEFAULT 0,
+                    hourly_earned   INTEGER DEFAULT 0
                 )
             """)
             
@@ -67,6 +69,8 @@ class Database:
                 "referral_today": "INTEGER DEFAULT 0",
                 "referral_rewarded": "INTEGER DEFAULT 0",
                 "send_coin_admin": "INTEGER DEFAULT 0",
+                "last_hourly": "INTEGER DEFAULT 0",
+                "hourly_earned": "INTEGER DEFAULT 0",
             }
             for col, col_type in new_columns.items():
                 if col not in existing_columns:
