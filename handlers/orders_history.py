@@ -95,11 +95,19 @@ async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         await q.message.reply_text("❌ لغو سفارش غیرفعال است.")
         return
     
+    # 👇 این بلاک تغییر کرد: پیام معمولی + دکمه تلاش مجدد
     cancel_at = order.get("cancel_at") or 0
     if now_ts() < cancel_at:
         remaining = cancel_at - now_ts()
-        await q.answer(f"⏳ {remaining} ثانیه دیگر می‌توانید لغو کنید.", show_alert=True)
+        await q.message.reply_text(
+            f"⏳ {remaining} ثانیه دیگر می‌توانید لغو کنید.\n\n"
+            f"👈 لطفاً صبر کنید.",
+            reply_markup=inline([
+                [("🔄 تلاش مجدد", f"cancel_confirm:{order_id}")]
+            ])
+        )
         return
+    # 👆 پایان تغییر
     
     ratio = float(get_setting("cancel_refund_ratio", "0.5"))
     remaining = order["member_target"] - order["member_received"]
