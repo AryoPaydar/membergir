@@ -137,13 +137,11 @@ async def on_message(update: Update, context):
             logger.info("✅ admin.handle_text handled")
             return
         
-        # کد هدیه (جدا)
         if text == "🎉 کد هدیه":
             await gift.gift_admin_menu(update, context)
             logger.info("✅ gift.gift_admin_menu handled")
             return
         
-        # دکمه‌های ادمین
         if text in ADMIN_BUTTONS and ADMIN_BUTTONS[text]:
             try:
                 await ADMIN_BUTTONS[text](update, context)
@@ -154,7 +152,7 @@ async def on_message(update: Update, context):
         
         logger.info(f"❌ No admin handler for: '{text}'")
     
-    # ۳. دکمه‌های بانک (برای همه کاربران)
+    # ۳. دکمه‌های بانک
     if text == "💎 انتقال الماس":
         await history.transfer_start(update, context)
         return
@@ -165,6 +163,9 @@ async def on_message(update: Update, context):
         await history.history_sent(update, context)
         return
     if text == "🔙 بازگشت به منوی اصلی":
+        await user.back_to_menu(update, context)
+        return
+    if text == "🔙 بازگشت به صفحه اصلی":
         await user.back_to_menu(update, context)
         return
     
