@@ -21,6 +21,10 @@ def back_button():
 def gift_user_back_keyboard():
     return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
 
+# ==================== کیبورد بازگشت از قوانین ====================
+def rules_back_keyboard():
+    return ReplyKeyboardMarkup([["🔙 بازگشت به صفحه اصلی"]], resize_keyboard=True)
+
 # ==================== کیبورد بانک انتقال ====================
 def bank_menu():
     return ReplyKeyboardMarkup([
