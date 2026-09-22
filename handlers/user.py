@@ -7,7 +7,7 @@ from bot_manager import (
     add_coins, get_daily_gift, is_admin, is_banned, check_membership,
     get_panel_config
 )
-from utils.keyboards import main_menu, back_button, inline
+from utils.keyboards import main_menu, back_button, inline, rules_back_keyboard
 from utils.texts import start_text, account_text
 from utils.helpers import now_ts, jalali_now
 
@@ -313,17 +313,30 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ==================== ⚖️ قوانین ====================
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from bot_manager import get_setting
-    text = get_setting("rules_text",
-        "📜 <b>قوانین ربات:</b>\n\n"
-        "۱. استفاده از ربات به معنی پذیرش قوانین است.\n"
-        "۲. هرگونه تخلف منجر به مسدودیت می‌شود.\n"
-        "۳. مسئولیت اطلاعات وارد شده بر عهده کاربر است."
+    text = (
+        "به بخش ⚖️ قوانین ممبرگیر هایو خوش آمدید.\n"
+        "\n"
+        "❗️ نکات مهم (با دقت بخوانید)❗️ :\n"
+        "📍وقتی توی سفارش ها عضو میشید و الماس میگیرین نباید کمتر از 3 روز لفت بدین چون الماس کسر میشه ازتون. پس باید 3 روز کامل صبر کنید و روز چهارم میتونید لفت بدین.\n"
+        "⚠️ثبت سفارش کانال ممبر گیر، سین گیر، فروش الماس ربات، مسائل سیاسی و مذهبی و کانال +18 باعث مسدود شدن همیشگی حساب و کانالتان می شود.\n"
+        "⚠️اگر سفارش در حال انجام دارین ایدی مقصد رو تغییر ندید یا ربات رو از ادمینی خارج نکنید چون سایر افراد میتونن بدون عضویت سفارش شما رو تکمیل کنن و در حقتون اجحاف میشه.\n"
+        "⚠️ به هیچ وجه پشت سرهم چند تا سفارش ندین چون ناتمام تکمیل میشن.\n"
+        "و سفارش هایی که مشکل دارن پاک میشن و همچنین گروه هایی که درخواست عضویت شون فعاله لغو میشه و سفارش دهنده مسدود میشه از ربات!\n"
+        "⚠️ همچنین ما هیچ مسئولیتی در قبال کانال و گروه های تبلیغ شده نداریم.\n"
+        "\n"
+        "❌به هیچ عنوان  از باگ های احتمالی ربات سو استفاده نکنید\n"
+        "❗️ کسایی که اخطار میگیرن یا مسدود میشن به هیچ وجه بخشیده نمیشن!\n"
+        "\n"
+        "❗️❗️توجه داشته باشید قبل از ثبت سفارش \n"
+        "ربات باید ادمین کانال یا گروه تون باشه.\n"
+        "\n"
+        "✅کلیه پرداخت های کارت به کارت توسط پشتیبانی ربات ( @Eror_500 ) انجام می شود.\n"
+        "✅ بعد از پرداخت هزینه ، بسته مورد نظر توسط پشتیبانی به حساب شما واریز خواهد شد.\n"
+        "جهت مشاوره یا سوال و خرید به پشتیبانی مراجعه کنید👇"
     )
     await update.message.reply_text(
         text,
-        parse_mode="HTML",
-        reply_markup=main_menu(is_admin(update.effective_user.id))
+        reply_markup=rules_back_keyboard()
     )
 
 
@@ -495,7 +508,6 @@ async def help_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بازگشت به منوی اصلی راهنما"""
     q = update.callback_query
     await q.answer()
     
@@ -524,7 +536,6 @@ async def help_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بازگشت به منوی اصلی ربات"""
     q = update.callback_query
     await q.answer()
     try:
