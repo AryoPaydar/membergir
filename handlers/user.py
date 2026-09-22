@@ -311,6 +311,71 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await q.answer("❌ هنوز عضو نشده‌اید!", show_alert=True)
 
 
+# ==================== ⚖️ قوانین ====================
+async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from bot_manager import get_setting
+    text = get_setting("rules_text",
+        "📜 <b>قوانین ربات:</b>\n\n"
+        "۱. استفاده از ربات به معنی پذیرش قوانین است.\n"
+        "۲. هرگونه تخلف منجر به مسدودیت می‌شود.\n"
+        "۳. مسئولیت اطلاعات وارد شده بر عهده کاربر است."
+    )
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=main_menu(is_admin(update.effective_user.id))
+    )
+
+
+# ==================== 💡 راهنما ====================
+async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from bot_manager import get_setting
+    text = get_setting("help_text",
+        "💡 <b>راهنمای استفاده از ربات:</b>\n\n"
+        "• برای دریافت سکه روزانه روی 💰 دریافت سکه بزنید\n"
+        "• برای ثبت سفارش روی 🚀 ثبت سفارش بزنید\n"
+        "• برای مشاهده حساب کاربری روی 👤 حساب کاربری بزنید\n"
+        "• برای انتقال الماس روی 🏦 بانک انتقال بزنید\n\n"
+        "در صورت داشتن هرگونه سوال با مدیریت در ارتباط باشید."
+    )
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=main_menu(is_admin(update.effective_user.id))
+    )
+
+
+# ==================== 📨 ارتباط با مدیریت ====================
+async def contact_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from bot_manager import get_setting
+    text = get_setting("contact_text",
+        "📨 <b>ارتباط با مدیریت:</b>\n\n"
+        "برای ارتباط با مدیریت ربات، از طریق آیدی زیر پیام دهید:\n\n"
+        "👤 ادمین: @YourAdmin"
+    )
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=main_menu(is_admin(update.effective_user.id))
+    )
+
+
+# ==================== 💞 حمایت مالی ====================
+async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from bot_manager import get_setting
+    text = get_setting("support_text",
+        "💞 <b>حمایت مالی از ربات:</b>\n\n"
+        "از حمایت شما سپاسگزاریم 🙏\n\n"
+        "💳 شماره کارت: <code>0000-0000-0000-0000</code>\n"
+        "👤 به نام: مدیر ربات"
+    )
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=main_menu(is_admin(update.effective_user.id))
+    )
+
+
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
