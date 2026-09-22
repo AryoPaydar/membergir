@@ -35,6 +35,10 @@ USER_BUTTONS = {
     "🚀 ارتقا پنل": panel.panel_menu,
     "🏆 برترین‌ها": top.top_menu,
     "🏦 بانک انتقال": history.history_menu,
+    "⚖️ قوانین": user.rules,
+    "💡راهنما": user.help_menu,
+    "📨 ارتباط با مدیریت": user.contact_admin,
+    "💞حمایت مالی": user.support,
 }
 
 ADMIN_BUTTONS = {
@@ -197,7 +201,6 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
     
-    # 👇 orders_history و history اول
     modules = [
         history,
         orders_history,
