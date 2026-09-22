@@ -329,19 +329,212 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== 💡 راهنما ====================
 async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from bot_manager import get_setting
-    text = get_setting("help_text",
-        "💡 <b>راهنمای استفاده از ربات:</b>\n\n"
-        "• برای دریافت سکه روزانه روی 💰 دریافت سکه بزنید\n"
-        "• برای ثبت سفارش روی 🚀 ثبت سفارش بزنید\n"
-        "• برای مشاهده حساب کاربری روی 👤 حساب کاربری بزنید\n"
-        "• برای انتقال الماس روی 🏦 بانک انتقال بزنید\n\n"
-        "در صورت داشتن هرگونه سوال با مدیریت در ارتباط باشید."
+    text = (
+        "💡 به بخش راهنمای استفاده از ربات خوش آمدید\n"
+        "\n"
+        "لطفا از دکمه های زیر سوال خود را پیدا کنید.\n"
+        "همچنین میتوانید در صورت داشتن هر گونه سوال با مدیریت در ارتباط باشید."
     )
-    await update.message.reply_text(
+    
+    keyboard = inline([
+        [("💎 نحوه جمع آوری الماس", "help_collect")],
+        [("🛍 نحوه استفاده از فروشگاه", "help_shop")],
+        [("🚀 نحوه ثبت سفارش", "help_order")],
+        [("📋 نحوه پیگیری سفارش", "help_tracking")],
+        [("🎁 نحوه استفاده از کد هدیه", "help_gift")],
+        [("🏦 نحوه انتقال الماس", "help_transfer")],
+        [("🔙 بازگشت به منوی اصلی", "help_back")],
+    ])
+    
+    await update.message.reply_text(text, reply_markup=keyboard)
+
+
+# ==================== بخش‌های راهنما ====================
+async def help_collect(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    text = (
+        "💎 <b>نحوه جمع آوری الماس</b>\n"
+        "\n"
+        "برای جمع آوری الماس به صورت رایگان دو روش وجود دارد :\n"
+        "\n"
+        "1️⃣ <b>استفاده از سکه روزانه :</b>\n"
+        "کاربران میتوانند در هر 24 ساعت 1 بار از قسمت 💰 دریافت الماس و با زدن گزینه 💎 الماس روزانه، با توجه به پنلشان مقداری الماس دریافت نمایند.\n"
+        "\n"
+        "2️⃣ <b>دریافت از طریق عضویت در کانال :</b>\n"
+        "کاربران میتوانند از قسمت 💰 دریافت الماس و با زدن گزینه 📢 عضویت در کانال میتوانید ابتدا عضو کانال شود و با زدن دکمه دریافت الماس، متناسب با پنل خود، الماس دریافت نمایید.\n"
+        "\n"
+        "⚠️ لازم به ذکر است در صورت عضویت در کانال و دریافت سکه الزاما باید 3 روز در کانال بمانند در غیر این صورت سکه های دریافتی به عنوان جریمه مسترد میشود."
+    )
+    
+    await q.message.reply_text(
         text,
         parse_mode="HTML",
-        reply_markup=main_menu(is_admin(update.effective_user.id))
+        reply_markup=inline([
+            [("🔙 بازگشت", "help_main")]
+        ])
+    )
+
+
+async def help_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    text = (
+        "🛍 <b>نحوه استفاده از فروشگاه</b>\n"
+        "\n"
+        "کاربران برای خرید الماس یا خرید پنل از بخش 🛍 فروشگاه اقدام نمایند.\n"
+        "\n"
+        "لازم به توضیح برای استفاده از بخش فروشگاه ابتدا باید شماره موبایل خود را وارد نمایند.\n"
+        "\n"
+        "⚠️ البته لازم به ذکر است که شماره شما نزد ما محفوظ است و هیچ شخصی به آن دسترسی نخواهد داشت."
+    )
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("🔙 بازگشت", "help_main")]
+        ])
+    )
+
+
+async def help_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    text = (
+        "🚀 <b>نحوه ثبت سفارش</b>\n"
+        "\n"
+        "برای ثبت سفارش تنها کافی است که ربات رو در کانال یا گروه خود ادمین کنید و سپس از بخش 🚀 ثبت سفارش مقدار ممبر مورد نیاز خود را سفارش دهند.\n"
+        "\n"
+        "⚠️ به خاطر داشته باشید که چنانچه ربات ادمین کانال یا گروه شما نباشد یا ایدی کانال یا گروه شما تغییر پیدا کند، سایر کاربران میتوانند بدون عضویت در کانال شما با زدن دریافت سکه، سفارش شما را تکمیل نمایند."
+    )
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("🔙 بازگشت", "help_main")]
+        ])
+    )
+
+
+async def help_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    text = (
+        "📋 <b>نحوه پیگیری سفارش</b>\n"
+        "\n"
+        "در منوی کاربری با زدن دکمه 📋 پیگیری سفارش میتوانید گزارش سفارش هایی که انجام دادید را دریافت نمایید.\n"
+        "\n"
+        "این گزارش شامل تعداد اعضای ورود و خروجی به کانال یا گروه شما میباشد.\n"
+        "\n"
+        "همچنین در این بخش میتوانید سفارش خود را کنسل و با توجه به مقدار کاربران دریافتی، مابقی الماس های خود را مسترد نمایید."
+    )
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("🔙 بازگشت", "help_main")]
+        ])
+    )
+
+
+async def help_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    text = (
+        "🎁 <b>نحوه استفاده از کد هدیه</b>\n"
+        "\n"
+        "در پنل کاربری با استفاده از دکمه 🎁 کد هدیه میتوانید با وارد کردن کد هدیه، هدیه خود را دریافت نمایید.\n"
+        "\n"
+        "⚠️ توجه داشته باشید که دو نوع هدیه وجود دارد:\n"
+        "\n"
+        "1️⃣ <b>هدیه دائمی :</b>\n"
+        "این نوع از هدیه مستقیما وارد حساب کاربری شما میشود و هر زمان بخواهید میتوانید از آن استفاده نمایید یا به دیگران انتقال دهید.\n"
+        "شما میتوانید مقدار این هدیه را در حساب کاربری و قسمت 🎁 هدیه مدیریت مشاهده فرمایید.\n"
+        "\n"
+        "2️⃣ <b>هدیه اعتباری :</b>\n"
+        "این نوع از هدیه باید در مدت زمان مقرر مصرف شود وگرنه از حساب کاربری شما کسر خواهد شد. همچنین این هدیه قابلیت انتقال به کاربران دیگر را ندارد.\n"
+        "شما میتوانید مقدار و زمان باقی مانده این هدیه را در حساب کاربری و قسمت 🎊 هدیه اعتباری و ⏳ زمان باقی مانده هدیه اعتباری مشاهده فرمایید."
+    )
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("🔙 بازگشت", "help_main")]
+        ])
+    )
+
+
+async def help_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    text = (
+        "🏦 <b>نحوه انتقال الماس</b>\n"
+        "\n"
+        "شما میتوانید الماس های خود را به هر کاربر دیگر که تمایل داشتید انتقال دهید.\n"
+        "\n"
+        "برای اینکار کافیست از منوی کاربری، دکمه 🏦 بانک انتقال را بزنید و سپس 💎 انتقال الماس را انتخاب نمایید تا با وارد کردن شماره کاربری فرد مورد نظر و تایید انتقال، مقدار الماس مورد نظر خود را به دیگران انتقال دهید."
+    )
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("🔙 بازگشت", "help_main")]
+        ])
+    )
+
+
+async def help_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بازگشت به منوی اصلی راهنما"""
+    q = update.callback_query
+    await q.answer()
+    
+    text = (
+        "💡 به بخش راهنمای استفاده از ربات خوش آمدید\n"
+        "\n"
+        "لطفا از دکمه های زیر سوال خود را پیدا کنید.\n"
+        "همچنین میتوانید در صورت داشتن هر گونه سوال با مدیریت در ارتباط باشید."
+    )
+    
+    try:
+        await q.message.edit_text(
+            text,
+            reply_markup=inline([
+                [("💎 نحوه جمع آوری الماس", "help_collect")],
+                [("🛍 نحوه استفاده از فروشگاه", "help_shop")],
+                [("🚀 نحوه ثبت سفارش", "help_order")],
+                [("📋 نحوه پیگیری سفارش", "help_tracking")],
+                [("🎁 نحوه استفاده از کد هدیه", "help_gift")],
+                [("🏦 نحوه انتقال الماس", "help_transfer")],
+                [("🔙 بازگشت به منوی اصلی", "help_back")],
+            ])
+        )
+    except Exception:
+        pass
+
+
+async def help_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بازگشت به منوی اصلی ربات"""
+    q = update.callback_query
+    await q.answer()
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        q.from_user.id,
+        "🏠 منوی اصلی",
+        reply_markup=main_menu(is_admin(q.from_user.id))
     )
 
 
@@ -394,6 +587,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return True
     if data == "go_to_shop":
         await go_to_shop(update, context)
+        return True
+    if data == "help_collect":
+        await help_collect(update, context)
+        return True
+    if data == "help_shop":
+        await help_shop(update, context)
+        return True
+    if data == "help_order":
+        await help_order(update, context)
+        return True
+    if data == "help_tracking":
+        await help_tracking(update, context)
+        return True
+    if data == "help_gift":
+        await help_gift(update, context)
+        return True
+    if data == "help_transfer":
+        await help_transfer(update, context)
+        return True
+    if data == "help_main":
+        await help_main(update, context)
+        return True
+    if data == "help_back":
+        await help_back(update, context)
         return True
     if data == "back":
         await q.answer()
