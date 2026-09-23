@@ -27,7 +27,6 @@ async def users_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         banned = c.execute("SELECT COUNT(*) c FROM users WHERE banned=1").fetchone()["c"]
         warned = c.execute("SELECT COUNT(*) c FROM users WHERE warnings > 0").fetchone()["c"]
         
-        # کاربران دارای سفارش فعال
         active_users = c.execute("""
             SELECT COUNT(DISTINCT admin_id) c FROM orders WHERE status = 'running'
         """).fetchone()["c"]
@@ -39,13 +38,13 @@ async def users_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🚫 کاربران بن شده : {banned:,}\n"
         f"⚠️ کاربران دارای اخطار : {warned:,}\n"
         f"⛓️ کاربران داری سفارش فعال : {active_users:,}\n"
-        f"⛓️‍💥 کاربران بدون سفارش فعال : {inactive_users:,}"
+        f"⛓️ کاربران بدون سفارش فعال : {inactive_users:,}"
     )
     
     keyboard = inline([
         [("👥 نمایش همه کاربران", "au_all:0"), ("🔍 جستجوی کاربران", "au_search")],
         [("🚫 کاربران بن شده", "au_banned:0"), ("⚠️ کاربران دارای اخطار", "au_warned:0")],
-        [("⛓️‍💥 کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
+        [("⛓️ کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
         [("🔙 بازگشت به پنل مدیریت", "au_back")],
     ])
     
@@ -64,18 +63,6 @@ async def au_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==================== نمایش لیست کاربران ====================
-def _user_row_text(u):
-    """ساخت متن هر کاربر در لیست"""
-    name = u["first_name"] or "کاربر"
-    username = f"@{u['username']}" if u["username"] else "ندارد"
-    return (
-        f"🔰 نام کاربری : {name}\n"
-        f"🆔 یوزرنیم : {username}\n"
-        f"🫆 شماره کاربری : {u['user_id']}\n"
-        f"💰 موجودی : {u.get('coins', 0):,}\n"
-    )
-
-
 async def _show_users_list(update, context, users, page, title, filter_type):
     """نمایش لیست کاربران با صفحه‌بندی"""
     q = update.callback_query
@@ -103,7 +90,6 @@ async def _show_users_list(update, context, users, page, title, filter_type):
             (f"👤 {name} | {u['user_id']}", f"au_show:{u['user_id']}")
         ])
     
-    # صفحه‌بندی
     if total_pages > 1:
         nav = []
         if page > 0:
@@ -121,71 +107,44 @@ async def _show_users_list(update, context, users, page, title, filter_type):
         pass
 
 
-# ==================== Callback های فیلترها ====================
-async def au_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ==================== فیلترها ====================
+async def _handle_filter(update, context, filter_type, page):
+    """هندل فیلترها با صفحه‌بندی"""
     q = update.callback_query
     await q.answer()
     
     with db.conn() as c:
-        users = c.execute("SELECT * FROM users ORDER BY join_date DESC").fetchall()
+        if filter_type == "all":
+            users = c.execute("SELECT * FROM users ORDER BY join_date DESC").fetchall()
+            title = "👥 نمایش همه کاربران :"
+        elif filter_type == "banned":
+            users = c.execute("SELECT * FROM users WHERE banned = 1 ORDER BY join_date DESC").fetchall()
+            title = "🚫 کاربران بن شده :"
+        elif filter_type == "warned":
+            users = c.execute("SELECT * FROM users WHERE warnings > 0 ORDER BY warnings DESC").fetchall()
+            title = "⚠️ کاربران دارای اخطار :"
+        elif filter_type == "no_order":
+            users = c.execute("""
+                SELECT * FROM users
+                WHERE user_id NOT IN (
+                    SELECT DISTINCT admin_id FROM orders WHERE status = 'running'
+                )
+                ORDER BY join_date DESC
+            """).fetchall()
+            title = "⛓️ کاربران بدون سفارش فعال :"
+        elif filter_type == "has_order":
+            users = c.execute("""
+                SELECT DISTINCT u.* FROM users u
+                INNER JOIN orders o ON o.admin_id = u.user_id
+                WHERE o.status = 'running'
+                ORDER BY u.join_date DESC
+            """).fetchall()
+            title = "⛓️ کاربران دارای سفارش فعال :"
+        else:
+            return
     
     users = [dict(u) for u in users]
-    await _show_users_list(update, context, users, 0, "👥 نمایش همه کاربران :", "all")
-
-
-async def au_banned(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    
-    with db.conn() as c:
-        users = c.execute("SELECT * FROM users WHERE banned = 1 ORDER BY join_date DESC").fetchall()
-    
-    users = [dict(u) for u in users]
-    await _show_users_list(update, context, users, 0, "🚫 کاربران بن شده :", "banned")
-
-
-async def au_warned(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    
-    with db.conn() as c:
-        users = c.execute("SELECT * FROM users WHERE warnings > 0 ORDER BY warnings DESC").fetchall()
-    
-    users = [dict(u) for u in users]
-    await _show_users_list(update, context, users, 0, "⚠️ کاربران دارای اخطار :", "warned")
-
-
-async def au_no_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    
-    with db.conn() as c:
-        users = c.execute("""
-            SELECT * FROM users
-            WHERE user_id NOT IN (
-                SELECT DISTINCT admin_id FROM orders WHERE status = 'running'
-            )
-            ORDER BY join_date DESC
-        """).fetchall()
-    
-    users = [dict(u) for u in users]
-    await _show_users_list(update, context, users, 0, "⛓️‍💥 کاربران بدون سفارش فعال :", "no_order")
-
-
-async def au_has_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    
-    with db.conn() as c:
-        users = c.execute("""
-            SELECT DISTINCT u.* FROM users u
-            INNER JOIN orders o ON o.admin_id = u.user_id
-            WHERE o.status = 'running'
-            ORDER BY u.join_date DESC
-        """).fetchall()
-    
-    users = [dict(u) for u in users]
-    await _show_users_list(update, context, users, 0, "⛓️ کاربران دارای سفارش فعال :", "has_order")
+    await _show_users_list(update, context, users, page, title, filter_type)
 
 
 # ==================== منوی مدیریت کاربر خاص ====================
@@ -223,36 +182,30 @@ async def au_show(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _build_user_info_text(user_id):
-    """ساخت متن اطلاعات کاربر (مشترک با user_info)"""
+    """ساخت متن اطلاعات کاربر"""
     user = get_user(user_id)
     if not user:
         return "❌ کاربر یافت نشد."
     
-    # تاریخ عضویت
     try:
         dt = datetime.strptime(str(user["join_date"])[:19], "%Y-%m-%d %H:%M:%S")
         join_date_jalali = jdatetime.date.fromgregorian(date=dt.date()).strftime("%Y/%m/%d")
     except Exception:
         join_date_jalali = str(user.get("join_date", ""))[:10]
     
-    # پنل
     panel = user.get("panel", "عادی")
-    
-    # تأیید
     is_verified = bool(user.get("phone"))
     verify_status = "تایید شده ✅" if is_verified else "تایید نشده ❌"
     
     warnings = user.get("warnings", 0)
     max_warn = Config.MAX_WARNINGS
     
-    # امروز
     today, _ = jalali_now()
     today_earned = user.get("today_earned", 0) if user.get("today_date") == today else 0
     
     total_earned = user.get("total_earned", 0)
     total_spent = user.get("total_spent", 0)
     
-    # هدیه مدیریت + زیرمجموعه
     with db.conn() as c:
         gift_row = c.execute("""
             SELECT COALESCE(SUM(amount), 0) as total FROM transactions
@@ -289,7 +242,6 @@ async def _build_user_info_text(user_id):
         """, (user_id,)).fetchone()
         inv_commission = commission_row["total"] if commission_row else 0
     
-    # هدیه ساعتی
     hourly_earned = user.get("hourly_earned", 0)
     last_hourly = user.get("last_hourly", 0)
     now = now_ts()
@@ -341,7 +293,6 @@ async def _build_user_info_text(user_id):
 
 # ==================== دکمه‌های مدیریت کاربر ====================
 async def au_subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش زیرمجموعه‌های کاربر"""
     q = update.callback_query
     await q.answer()
     target_id = int(q.data.split(":")[1])
@@ -378,7 +329,6 @@ async def au_subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش منوی ارتقای پنل"""
     q = update.callback_query
     await q.answer()
     target_id = int(q.data.split(":")[1])
@@ -404,7 +354,6 @@ async def au_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_set_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تغییر پنل کاربر"""
     q = update.callback_query
     await q.answer("✅ پنل تغییر یافت.", show_alert=True)
     
@@ -427,13 +376,11 @@ async def au_set_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     
-    # بازگشت به پنل کاربر
     q.data = f"au_show:{target_id}"
     await au_show(update, context)
 
 
 async def au_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """شروع ارسال هدیه"""
     q = update.callback_query
     await q.answer()
     target_id = int(q.data.split(":")[1])
@@ -448,7 +395,6 @@ async def au_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_warns(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش اخطارات و مدیریت"""
     q = update.callback_query
     await q.answer()
     target_id = int(q.data.split(":")[1])
@@ -472,7 +418,6 @@ async def au_warns(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_warn_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """افزودن اخطار"""
     q = update.callback_query
     target_id = int(q.data.split(":")[1])
     
@@ -492,7 +437,6 @@ async def au_warn_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_warn_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """صفر کردن اخطارات"""
     q = update.callback_query
     target_id = int(q.data.split(":")[1])
     
@@ -504,7 +448,6 @@ async def au_warn_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بن/آن بن کاربر"""
     q = update.callback_query
     target_id = int(q.data.split(":")[1])
     
@@ -533,7 +476,6 @@ async def au_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_transfers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش انتقالات کاربر"""
     q = update.callback_query
     await q.answer()
     target_id = int(q.data.split(":")[1])
@@ -569,7 +511,6 @@ async def au_transfers(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def au_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ارسال پیام به کاربر"""
     q = update.callback_query
     await q.answer()
     target_id = int(q.data.split(":")[1])
@@ -583,7 +524,6 @@ async def au_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== منوی جستجوی کاربر ====================
 async def au_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -593,6 +533,19 @@ async def au_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.message.reply_text(
         "🔍 جستجوی کاربران\n\n"
         "نام کاربری، یوزرنیم یا شناسه کاربری فرد مورد نظر را ارسال فرمایید:",
+        reply_markup=back_button()
+    )
+
+
+# ==================== تابع قدیمی user_info ====================
+async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت کاربر خاص با آیدی"""
+    if not is_admin(update.effective_user.id):
+        return
+    set_user_state(update.effective_user.id, "admin_user_info")
+    await update.message.reply_text(
+        "✅ با استفاده از این بخش می توانید اطلاعات حساب کاربری کاربر مورد نظر را دریافت کنید\n\n"
+        "👈آیدی عددی کاربر مورد نظر را ارسال نمایید",
         reply_markup=back_button()
     )
 
@@ -609,13 +562,35 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     if not state or state == "none":
         return False
     
-    # بازگشت
+    # ===== بازگشت =====
     if text == "🔙 بازگشت":
         set_user_state(user_id, "none")
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
     
-    # ==== جستجوی کاربر ====
+    # ===== مدیریت کاربر با آیدی (state قدیمی) =====
+    if state == "admin_user_info":
+        if not is_positive_int(text):
+            await update.message.reply_text("❌ فقط آیدی عددی مجاز است.")
+            return True
+        
+        target = get_user(int(text))
+        if not target:
+            await update.message.reply_text("⚠️ این کاربر در دیتابیس ربات شما یافت نشد.")
+            set_user_state(user_id, "none")
+            return True
+        
+        info_text = await _build_user_info_text(int(text))
+        
+        set_user_state(user_id, "none")
+        await update.message.reply_text(
+            info_text,
+            parse_mode="HTML",
+            reply_markup=admin_panel()
+        )
+        return True
+    
+    # ===== جستجوی کاربر =====
     if state == "au_search_input":
         query_clean = text.strip().lstrip("@")
         
@@ -635,7 +610,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             else:
                 users = c.execute(
                     "SELECT * FROM users WHERE username LIKE ? OR first_name LIKE ?",
-                    (f"%{query_clean}%", f"%{query}%")
+                    (f"%{query_clean}%", f"%{query_clean}%")
                 ).fetchall()
         
         users = [dict(u) for u in users]
@@ -660,7 +635,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text(text_out, reply_markup=inline(rows))
         return True
     
-    # ==== ارسال هدیه ====
+    # ===== ارسال هدیه =====
     if state == "au_gift_input":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -696,7 +671,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             pass
         return True
     
-    # ==== ارسال پیام به کاربر ====
+    # ===== ارسال پیام به کاربر =====
     if state == "au_msg_input":
         target_id = data.get("target_id")
         
@@ -729,17 +704,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_admin(q.from_user.id):
         return False
     
-    # منو
+    # منوی مدیریت کاربران
     if data == "au_menu":
         await q.answer()
-        try:
-            await q.message.delete()
-        except Exception:
-            pass
-        # بازگشت به منوی کاربران
-        from telegram import Update as _U
-        # شبیه‌سازی update.message
-        await users_menu_callback(update, context)
+        # بازگشت به منوی اصلی مدیریت کاربران
+        await _show_users_menu_callback(update, context)
         return True
     
     if data == "au_back":
@@ -814,46 +783,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return False
 
 
-async def _handle_filter(update, context, filter_type, page):
-    """هندل فیلترها با صفحه‌بندی"""
-    q = update.callback_query
-    await q.answer()
-    
-    with db.conn() as c:
-        if filter_type == "all":
-            users = c.execute("SELECT * FROM users ORDER BY join_date DESC").fetchall()
-            title = "👥 نمایش همه کاربران :"
-        elif filter_type == "banned":
-            users = c.execute("SELECT * FROM users WHERE banned = 1 ORDER BY join_date DESC").fetchall()
-            title = "🚫 کاربران بن شده :"
-        elif filter_type == "warned":
-            users = c.execute("SELECT * FROM users WHERE warnings > 0 ORDER BY warnings DESC").fetchall()
-            title = "⚠️ کاربران دارای اخطار :"
-        elif filter_type == "no_order":
-            users = c.execute("""
-                SELECT * FROM users
-                WHERE user_id NOT IN (
-                    SELECT DISTINCT admin_id FROM orders WHERE status = 'running'
-                )
-                ORDER BY join_date DESC
-            """).fetchall()
-            title = "⛓️‍💥 کاربران بدون سفارش فعال :"
-        elif filter_type == "has_order":
-            users = c.execute("""
-                SELECT DISTINCT u.* FROM users u
-                INNER JOIN orders o ON o.admin_id = u.user_id
-                WHERE o.status = 'running'
-                ORDER BY u.join_date DESC
-            """).fetchall()
-            title = "⛓️ کاربران دارای سفارش فعال :"
-        else:
-            return
-    
-    users = [dict(u) for u in users]
-    await _show_users_list(update, context, users, page, title, filter_type)
-
-
-async def users_menu_callback(update, context):
+async def _show_users_menu_callback(update, context):
     """نمایش منوی مدیریت کاربران از callback"""
     q = update.callback_query
     user_id = q.from_user.id
@@ -877,13 +807,13 @@ async def users_menu_callback(update, context):
         f"🚫 کاربران بن شده : {banned:,}\n"
         f"⚠️ کاربران دارای اخطار : {warned:,}\n"
         f"⛓️ کاربران داری سفارش فعال : {active_users:,}\n"
-        f"⛓️‍💥 کاربران بدون سفارش فعال : {inactive_users:,}"
+        f"⛓️ کاربران بدون سفارش فعال : {inactive_users:,}"
     )
     
     keyboard = inline([
         [("👥 نمایش همه کاربران", "au_all:0"), ("🔍 جستجوی کاربران", "au_search")],
         [("🚫 کاربران بن شده", "au_banned:0"), ("⚠️ کاربران دارای اخطار", "au_warned:0")],
-        [("⛓️‍💥 کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
+        [("⛓️ کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
         [("🔙 بازگشت به پنل مدیریت", "au_back")],
     ])
     
@@ -891,71 +821,3 @@ async def users_menu_callback(update, context):
         await q.message.edit_text(text, reply_markup=keyboard)
     except Exception:
         await q.message.reply_text(text, reply_markup=keyboard)
-
-
-# ==================== تابع قدیمی user_info (حفظ می‌شود) ====================
-async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت کاربر خاص با آیدی"""
-    if not is_admin(update.effective_user.id):
-        return
-    set_user_state(update.effective_user.id, "admin_user_info")
-    await update.message.reply_text(
-        "✅ با استفاده از این بخش می توانید اطلاعات حساب کاربری کاربر مورد نظر را دریافت کنید\n\n"
-        "👈آیدی عددی کاربر مورد نظر را ارسال نمایید",
-        reply_markup=back_button()
-    )
-
-
-# توی handle_state هم admin_user_info قدیمی رو حفظ می‌کنیم
-async def handle_state_old(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """State قدیمی — برای پیگیری کاربر با آیدی"""
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        return False
-    
-    state, data = get_user_state(user_id)
-    text = (update.message.text or "").strip()
-    
-    if state != "admin_user_info":
-        return False
-    
-    if text == "🔙 بازگشت":
-        set_user_state(user_id, "none")
-        await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
-        return True
-    
-    if not is_positive_int(text):
-        await update.message.reply_text("❌ فقط آیدی عددی مجاز است.")
-        return True
-    
-    target = get_user(int(text))
-    if not target:
-        await update.message.reply_text("⚠️ این کاربر در دیتابیس ربات شما یافت نشد.")
-        set_user_state(user_id, "none")
-        return True
-    
-    info_text = await _build_user_info_text(int(text))
-    
-    set_user_state(user_id, "none")
-    await update.message.reply_text(
-        info_text,
-        parse_mode="HTML",
-        reply_markup=admin_panel()
-    )
-    return True
-
-
-# ترکیب state handler ها
-async def handle_state_combined(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """ترکیب دو state handler"""
-    # اول state قدیمی
-    if await handle_state_old(update, context):
-        return True
-    # بعد state جدید
-    if await handle_state(update, context):
-        return True
-    return False
-
-
-# جایگزینی
-handle_state = handle_state_combined
