@@ -38,8 +38,7 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ ثبت سفارش موقتاً غیرفعال است.")
         return
     
-    default = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
-    text = get_setting("order_intro_text", default)
+    text = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
     
     rows = []
     for i in range(0, len(ORDER_ITEMS), 2):
@@ -109,7 +108,6 @@ def build_post_text(channel_title, channel_desc, channel):
     """ساخت متن پست تبلیغات — اگه توضیحات خالی بود، نمایش داده نمیشود"""
     text = f"‼️نام کانال : {channel_title}\n"
     
-    # اگه توضیحات خالی یا "ندارد" بود، نمایش نده
     if channel_desc and channel_desc.strip() and channel_desc.strip() != "ندارد":
         text += f"\n📝توضیحات کانال: {channel_desc}\n"
     
@@ -244,8 +242,13 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     bot_username = (await context.bot.get_me()).username
     
+    # متن دکمه سفارش کانال (قابل تنظیم)
+    from bot_manager import get_setting
+    order_btn_template = get_setting("order_btn_text", "👤 سفارش {members} ممبر")
+    order_btn_text = order_btn_template.replace("{members}", str(members))
+    
     button = inline([
-        [(f"👤 سفارش {members} 👤ممبر", "noop")],
+        [(order_btn_text, "noop")],
         [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
         [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
     ])
