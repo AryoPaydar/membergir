@@ -13,6 +13,17 @@ from utils.helpers import (
 )
 
 
+# ==================== آیتم‌های ثابت ثبت سفارش ====================
+ORDER_ITEMS = [
+    {"key": "item_20",   "members": 20,   "coins": 40},
+    {"key": "item_10",   "members": 10,   "coins": 20},
+    {"key": "item_100",  "members": 100,  "coins": 200},
+    {"key": "item_50",   "members": 50,   "coins": 100},
+    {"key": "item_400",  "members": 400,  "coins": 800},
+    {"key": "item_200",  "members": 200,  "coins": 400},
+]
+
+
 # ==================== تابع دریافت سکه عضویت (sync) ====================
 def get_panel_join_coin(panel):
     return Config.PANELS.get(panel, "عادی")["join_coin"]
@@ -27,22 +38,14 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ ثبت سفارش موقتاً غیرفعال است.")
         return
     
-    # 👇 از دیتابیس بخون
-    with db.conn() as c:
-        items = c.execute("SELECT * FROM order_items ORDER BY position").fetchall()
-    
-    if not items:
-        await update.message.reply_text("❌ هنوز آیتمی تنظیم نشده.")
-        return
-    
     text = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
     
     rows = []
-    for i in range(0, len(items), 2):
+    for i in range(0, len(ORDER_ITEMS), 2):
         row = []
-        for it in items[i:i+2]:
-            btn_text = f"👤 {it['members']} نفر = {it['coins']} الماس 💎"
-            row.append((btn_text, f"order_pick:{it['key']}"))
+        for item in ORDER_ITEMS[i:i+2]:
+            btn_text = f"👤 {item['members']} نفر = {item['coins']} الماس 💎"
+            row.append((btn_text, f"order_pick:{item['key']}"))
         rows.append(row)
     
     await update.message.reply_text(
@@ -57,15 +60,15 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = q.from_user.id
     item_key = q.data.split(":", 1)[1]
     
-    # 👇 از دیتابیس بخون
-    with db.conn() as c:
-        item = c.execute("SELECT * FROM order_items WHERE key = ?", (item_key,)).fetchone()
+    item = None
+    for it in ORDER_ITEMS:
+        if it["key"] == item_key:
+            item = it
+            break
     
     if not item:
         await q.answer("❌ آیتم یافت نشد.", show_alert=True)
         return
-    
-    item = dict(item)
     
     user = get_user(user_id)
     if not user or user["coins"] < item["coins"]:
@@ -98,6 +101,20 @@ def is_valid_at_channel(text: str) -> bool:
         return False
     import re
     return bool(re.match(r"^@[a-zA-Z0-9_]{5,32}$", text.strip()))
+
+
+# ==================== ساخت متن پست تبلیغات ====================
+def build_post_text(channel_title, channel_desc, channel):
+    """ساخت متن پست تبلیغات — اگه توضیحات خالی بود، نمایش داده نمیشود"""
+    text = f"‼️نام کانال : {channel_title}\n"
+    
+    # 👇 اگه توضیحات خالی یا "ندارد" بود، نمایش نده
+    if channel_desc and channel_desc.strip() and channel_desc.strip() != "ندارد":
+        text += f"\n📝توضیحات کانال: {channel_desc}\n"
+    
+    text += f"\n🆔@{channel}"
+    
+    return text
 
 
 # ==================== دریافت کانال ====================
@@ -160,17 +177,11 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         "coins": coins,
         "channel": channel,
         "channel_title": chat.title,
-        "channel_desc": chat.description or "ندارد",
+        "channel_desc": chat.description or "",
         "channel_id": chat.id,
     })
     
-    post_text = (
-        f"‼️نام کانال : {chat.title}\n"
-        f"\n"
-        f"📝توضیحات کانال: {chat.description or 'ندارد'}\n"
-        f"\n"
-        f"🆔@{channel}"
-    )
+    post_text = build_post_text(chat.title, chat.description or "", channel)
     
     sent = await update.message.reply_text(post_text, reply_markup=back_button())
     
@@ -204,7 +215,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channel = data.get("channel", "")
     channel_id = data.get("channel_id")
     channel_title = data.get("channel_title", "")
-    channel_desc = data.get("channel_desc", "ندارد")
+    channel_desc = data.get("channel_desc", "")
     
     user = get_user(user_id)
     if not user or user["coins"] < coins:
@@ -219,6 +230,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     
+    # 👇 اول سفارش رو توی دیتابیس ثبت کن
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
@@ -226,19 +238,16 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (user_id, channel, channel_id, None, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
     
-    post_text = (
-        f"‼️نام کانال : {channel_title}\n"
-        f"\n"
-        f"📝توضیحات کانال: {channel_desc}\n"
-        f"\n"
-        f"🆔@{channel}"
-    )
+    # 👇 ساخت متن پست با دکمه‌های جدید
+    post_text = build_post_text(channel_title, channel_desc, channel)
+    
+    bot_username = (await context.bot.get_me()).username
     
     button = inline([
         [(f"👤 سفارش {members} ممبر", "noop")],
-        [("💰 دریافت سکه", f"claim_coin:{order_id}")],
-        [("📢 عضویت در کانال", f"https://t.me/{channel}")],
-        [("🚫 گزارش", f"report:{order_id}")],
+        [("🌐 عضویت در کانال", f"https://t.me/{channel}"),
+         ("💎 دریافت الماس", f"claim_coin:{order_id}")],
+        [("🤖 ورود به ربات", f"https://t.me/{bot_username}")],
     ])
     
     try:
