@@ -38,7 +38,8 @@ async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ ثبت سفارش موقتاً غیرفعال است.")
         return
     
-    text = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
+    default = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
+    text = get_setting("order_intro_text", default)
     
     rows = []
     for i in range(0, len(ORDER_ITEMS), 2):
