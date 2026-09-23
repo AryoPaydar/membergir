@@ -108,7 +108,7 @@ def build_post_text(channel_title, channel_desc, channel):
     """ساخت متن پست تبلیغات — اگه توضیحات خالی بود، نمایش داده نمیشود"""
     text = f"‼️نام کانال : {channel_title}\n"
     
-    # 👇 اگه توضیحات خالی یا "ندارد" بود، نمایش نده
+    # اگه توضیحات خالی یا "ندارد" بود، نمایش نده
     if channel_desc and channel_desc.strip() and channel_desc.strip() != "ندارد":
         text += f"\n📝توضیحات کانال: {channel_desc}\n"
     
@@ -230,7 +230,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     
-    # 👇 اول سفارش رو توی دیتابیس ثبت کن
+    # اول سفارش رو توی دیتابیس ثبت کن
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
@@ -238,7 +238,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (user_id, channel, channel_id, None, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
     
-    # 👇 ساخت متن پست با دکمه‌های جدید
+    # ساخت متن پست با دکمه‌های جدید
     post_text = build_post_text(channel_title, channel_desc, channel)
     
     bot_username = (await context.bot.get_me()).username
@@ -247,7 +247,8 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [(f"👤 سفارش {members} ممبر", "noop")],
         [("🌐 عضویت در کانال", f"https://t.me/{channel}"),
          ("💎 دریافت الماس", f"claim_coin:{order_id}")],
-        [("🤖 ورود به ربات", f"https://t.me/{bot_username}")],
+        [("🤖 ورود به ربات", f"https://t.me/{bot_username}"),
+         ("🚫 گزارش", f"report:{order_id}")],
     ])
     
     try:
