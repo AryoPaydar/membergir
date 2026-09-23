@@ -1,11 +1,18 @@
 from config import Config
 
 def start_text(first_name, user_id):
-    return (
+    from bot_manager import get_setting
+    default = (
         f"👋 سلام <b>{first_name}</b> عزیز\n\n"
         f"🆔 آیدی شما: <code>{user_id}</code>\n\n"
         f"به ربات خوش آمدید. از منوی زیر گزینه مورد نظر را انتخاب کنید."
     )
+    text = get_setting("start_text", default)
+    # جایگزینی متغیرها
+    text = text.replace("{first_name}", first_name or "")
+    text = text.replace("{user_id}", str(user_id))
+    return text
+
 
 def account_text(user: dict):
     from database import db
@@ -13,53 +20,39 @@ def account_text(user: dict):
     import jdatetime
     from datetime import datetime
     
-    # ==== اطلاعات پایه ====
     first_name = user.get("first_name") or "کاربر"
     username = user.get("username")
     username_display = f"@{username}" if username else "ندارد"
     user_id = user["user_id"]
     
-    # ==== تاریخ عضویت شمسی ====
     try:
         dt = datetime.strptime(str(user["join_date"])[:19], "%Y-%m-%d %H:%M:%S")
         join_date_jalali = jdatetime.date.fromgregorian(date=dt.date()).strftime("%Y/%m/%d")
     except Exception:
         join_date_jalali = str(user.get("join_date", ""))[:10]
     
-    # ==== پنل ====
     panel = user.get("panel", "عادی")
-    
-    # ==== وضعیت تأیید ====
     is_verified = bool(user.get("phone"))
     verify_status = "تایید شده ✅" if is_verified else "تایید نشده ❌"
-    
-    # ==== اخطار ====
     warnings = user.get("warnings", 0)
     max_warn = Config.MAX_WARNINGS
     
-    # ==== موجودی کسب شده امروز ====
     today, _ = jalali_now()
     today_earned = user.get("today_earned", 0) if user.get("today_date") == today else 0
-    
-    # ==== مجموع کسب شده و مصرفی ====
     total_earned = user.get("total_earned", 0)
     total_spent = user.get("total_spent", 0)
     
-    # ==== هدیه مدیریت + زیرمجموعه ====
     with db.conn() as c:
         gift_row = c.execute("""
-            SELECT COALESCE(SUM(amount), 0) as total
-            FROM transactions
+            SELECT COALESCE(SUM(amount), 0) as total FROM transactions
             WHERE to_id = ? AND type = 'admin_gift'
         """, (user_id,)).fetchone()
         admin_gift = gift_row["total"] if gift_row else 0
         
-        # ==== زیرمجموعه‌ها ====
         ref_total = c.execute(
             "SELECT COUNT(*) c FROM users WHERE referrer_id = ?", (user_id,)
         ).fetchone()["c"]
         
-        # امروز - بر اساس تاریخ شمسی
         today_jalali = today
         ref_today = 0
         refs = c.execute(
@@ -67,27 +60,24 @@ def account_text(user: dict):
         ).fetchall()
         for r in refs:
             try:
-                dt = datetime.strptime(str(r["join_date"])[:19], "%Y-%m-%d %H:%M:%S")
-                jd = jdatetime.date.fromgregorian(date=dt.date()).strftime("%Y/%m/%d")
+                dt2 = datetime.strptime(str(r["join_date"])[:19], "%Y-%m-%d %H:%M:%S")
+                jd = jdatetime.date.fromgregorian(date=dt2.date()).strftime("%Y/%m/%d")
                 if jd == today_jalali:
                     ref_today += 1
             except Exception:
                 pass
         
-        # زیرمجموعه تأیید شده (ads_joined >= 3)
         ref_verified = c.execute("""
             SELECT COUNT(*) c FROM users
             WHERE referrer_id = ? AND ads_joined >= 3
         """, (user_id,)).fetchone()["c"]
         
         commission_row = c.execute("""
-            SELECT COALESCE(SUM(amount), 0) as total
-            FROM transactions
+            SELECT COALESCE(SUM(amount), 0) as total FROM transactions
             WHERE to_id = ? AND type IN ('referral', 'referral_commission')
         """, (user_id,)).fetchone()
         inv_commission = commission_row["total"] if commission_row else 0
     
-    # ==== هدیه ساعتی ====
     hourly_earned = user.get("hourly_earned", 0)
     last_hourly = user.get("last_hourly", 0)
     now = now_ts()
@@ -133,6 +123,7 @@ def account_text(user: dict):
     )
     
     return text
+
 
 def get_referral_count(user_id):
     from database import db
