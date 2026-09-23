@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
+# ==================== کیبورد اصلی کاربر ====================
 def main_menu(is_admin=False):
     rows = [
         ["💰 دریافت سکه", "👤 حساب کاربری"],
@@ -20,12 +21,15 @@ def back_button():
 def gift_user_back_keyboard():
     return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
 
+# ==================== کیبورد بازگشت از قوانین ====================
 def rules_back_keyboard():
     return ReplyKeyboardMarkup([["🔙 بازگشت به صفحه اصلی"]], resize_keyboard=True)
 
+# ==================== کیبورد انصراف پشتیبانی ====================
 def support_cancel_keyboard():
     return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
 
+# ==================== کیبورد بانک انتقال ====================
 def bank_menu():
     return ReplyKeyboardMarkup([
         ["💎 انتقال الماس"],
@@ -33,6 +37,7 @@ def bank_menu():
         ["🔙 بازگشت به منوی اصلی"],
     ], resize_keyboard=True)
 
+# ==================== کیبورد پنل ادمین ====================
 def admin_panel():
     return ReplyKeyboardMarkup([
         ["📈 آمار ربات", "📨 ارسال پیام"],
@@ -46,7 +51,9 @@ def admin_panel():
         ["🔕 خاموش/روشن", "🔙 بازگشت به منو"],
     ], resize_keyboard=True)
 
+# ==================== دکمه‌های شیشه‌ای ====================
 def inline(rows):
+    """rows = لیستی از لیست (text, callback_data) یا (text, url)"""
     keyboard = []
     for row in rows:
         line = []
