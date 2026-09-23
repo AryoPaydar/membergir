@@ -5,7 +5,7 @@ from config import Config
 from bot_manager import (
     get_user, create_user, update_user, set_user_state, get_user_state,
     add_coins, get_daily_gift, is_admin, is_banned, check_membership,
-    get_panel_config
+    get_panel_config, get_setting
 )
 from utils.keyboards import (
     main_menu, back_button, inline, rules_back_keyboard, support_cancel_keyboard
@@ -23,7 +23,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("⛔️ شما از ربات مسدود شده‌اید.")
         return
     
-    from bot_manager import is_bot_on, get_setting
+    from bot_manager import is_bot_on
     if not is_bot_on() and not is_admin(user.id):
         text = get_setting("power_text", "ربات در حال حاضر خاموش است.")
         await msg.reply_text(text)
@@ -118,7 +118,6 @@ async def handle_referral_join(context, referrer_id, new_user_id):
     except Exception:
         pass
     
-    from bot_manager import get_setting
     if get_setting("referral_report", "on") == "on":
         try:
             await context.bot.send_message(
@@ -315,7 +314,6 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ==================== ⚖️ قوانین ====================
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from bot_manager import get_setting
     default = (
         "به بخش ⚖️ قوانین ممبرگیر هایو خوش آمدید.\n"
         "\n"
@@ -346,14 +344,12 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== 💡 راهنما ====================
 async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from bot_manager import get_setting
-    default = (
+    text = (
         "💡 به بخش راهنمای استفاده از ربات خوش آمدید\n"
         "\n"
         "لطفا از دکمه های زیر سوال خود را پیدا کنید.\n"
         "همچنین میتوانید در صورت داشتن هر گونه سوال با مدیریت در ارتباط باشید."
     )
-    text = get_setting("help_text", default)
     
     keyboard = inline([
         [("💎 نحوه جمع آوری الماس", "help_collect")],
@@ -587,7 +583,7 @@ async def support_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== 💞 حمایت مالی ====================
 async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
+    default_text = (
         "💞 حمایت مالی از ربات:\n"
         "\n"
         "اگر از ربات های ما خوشتون اومد و دوست داشتین میتونین برای پیشرفت ربات ما همراهی کنین\n"
@@ -596,9 +592,13 @@ async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "البته بچه های محک هم فراموش نکنین"
     )
     
+    text = get_setting("support_text", default_text)
+    link_bot = get_setting("support_link_bot", "https://reymit.ir/bots_hive")
+    link_mahak = get_setting("support_link_mahak", "https://mahak-charity.org/online-payment/")
+    
     keyboard = inline([
-        [("💞 حمایت مالی از ربات", "https://reymit.ir/bots_hive")],
-        [("🤝 حمایت مالی در محک", "https://mahak-charity.org/online-payment/")],
+        [("💞 حمایت مالی از ربات", link_bot)],
+        [("🤝 حمایت مالی در محک", link_mahak)],
         [("🔙 بازگشت به منوی اصلی", "support_back")],
     ])
     
@@ -626,7 +626,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     text = (update.message.text or "").strip()
     
     if not state or state == "none":
-        # Gift state
         from handlers import gift
         if await gift.handle_state(update, context):
             return True
@@ -642,7 +641,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             )
             return True
         
-        # ذخیره پیام
         with db.conn() as c:
             cur = c.execute("""
                 INSERT INTO support_messages (user_id, message)
@@ -652,7 +650,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         
         set_user_state(user_id, "none")
         
-        # پیام تأیید به کاربر + منوی اصلی
         await update.message.reply_text(
             "پیام شما به مدیریت ارسال شد.\n"
             "\n"
@@ -660,7 +657,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             reply_markup=main_menu(is_admin(user_id))
         )
         
-        # پیام به ادمین
         try:
             await context.bot.send_message(
                 Config.ADMIN_ID,
@@ -678,7 +674,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         
         return True
     
-    # ==== State gift ====
     from handlers import gift
     if await gift.handle_state(update, context):
         return True
