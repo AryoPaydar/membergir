@@ -244,11 +244,9 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username = (await context.bot.get_me()).username
     
     button = inline([
-        [(f"👤 سفارش {members} ممبر", "noop")],
-        [("🌐 عضویت در کانال", f"https://t.me/{channel}"),
-         ("💎 دریافت الماس", f"claim_coin:{order_id}")],
-        [("🤖 ورود به ربات", f"https://t.me/{bot_username}"),
-         ("🚫 گزارش", f"report:{order_id}")],
+        [(f"👤 سفارش {members} 👤ممبر", "noop")],
+        [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
+        [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
     ])
     
     try:
