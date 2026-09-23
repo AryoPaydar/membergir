@@ -39,13 +39,13 @@ async def users_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🚫 کاربران بن شده : {banned:,}\n"
         f"⚠️ کاربران دارای اخطار : {warned:,}\n"
         f"⛓️ کاربران داری سفارش فعال : {active_users:,}\n"
-        f"⛓️ کاربران بدون سفارش فعال : {inactive_users:,}"
+        f"⛓️‍💥 کاربران بدون سفارش فعال : {inactive_users:,}"
     )
     
     keyboard = inline([
         [("👥 نمایش همه کاربران", "au_all:0"), ("🔍 جستجوی کاربران", "au_search")],
         [("🚫 کاربران بن شده", "au_banned:0"), ("⚠️ کاربران دارای اخطار", "au_warned:0")],
-        [("⛓️ کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
+        [("⛓️‍💥 کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
         [("🔙 بازگشت به پنل مدیریت", "au_back")],
     ])
     
@@ -169,7 +169,7 @@ async def au_no_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """).fetchall()
     
     users = [dict(u) for u in users]
-    await _show_users_list(update, context, users, 0, "⛓️ کاربران بدون سفارش فعال :", "no_order")
+    await _show_users_list(update, context, users, 0, "⛓️‍💥 کاربران بدون سفارش فعال :", "no_order")
 
 
 async def au_has_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -837,7 +837,7 @@ async def _handle_filter(update, context, filter_type, page):
                 )
                 ORDER BY join_date DESC
             """).fetchall()
-            title = "⛓️ کاربران بدون سفارش فعال :"
+            title = "⛓️‍💥 کاربران بدون سفارش فعال :"
         elif filter_type == "has_order":
             users = c.execute("""
                 SELECT DISTINCT u.* FROM users u
@@ -877,13 +877,13 @@ async def users_menu_callback(update, context):
         f"🚫 کاربران بن شده : {banned:,}\n"
         f"⚠️ کاربران دارای اخطار : {warned:,}\n"
         f"⛓️ کاربران داری سفارش فعال : {active_users:,}\n"
-        f"⛓️ کاربران بدون سفارش فعال : {inactive_users:,}"
+        f"⛓️‍💥 کاربران بدون سفارش فعال : {inactive_users:,}"
     )
     
     keyboard = inline([
         [("👥 نمایش همه کاربران", "au_all:0"), ("🔍 جستجوی کاربران", "au_search")],
         [("🚫 کاربران بن شده", "au_banned:0"), ("⚠️ کاربران دارای اخطار", "au_warned:0")],
-        [("⛓️ کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
+        [("⛓️‍💥 کاربران بدون سفارش", "au_no_order:0"), ("⛓️ کاربران دارای سفارش", "au_has_order:0")],
         [("🔙 بازگشت به پنل مدیریت", "au_back")],
     ])
     
