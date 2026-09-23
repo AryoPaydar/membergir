@@ -254,6 +254,19 @@ class Database:
                 )
             """)
             
+            # === پیام‌های پشتیبانی ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS support_messages (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id     INTEGER NOT NULL,
+                    message     TEXT NOT NULL,
+                    status      TEXT DEFAULT 'new',
+                    reply       TEXT,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    seen_at     TIMESTAMP
+                )
+            """)
+            
             # === ایندکس‌ها ===
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_admin ON orders(admin_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
@@ -264,6 +277,8 @@ class Database:
             c.execute("CREATE INDEX IF NOT EXISTS idx_gift_user_id ON gift_code_users(user_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_gift_active ON gift_codes(is_active)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_gift_type ON gift_codes(type)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_support_user ON support_messages(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_support_status ON support_messages(status)")
             
             # === ادمین اصلی ===
             c.execute(
