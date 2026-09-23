@@ -21,15 +21,12 @@ def back_button():
 def gift_user_back_keyboard():
     return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
 
-# ==================== کیبورد بازگشت از قوانین ====================
 def rules_back_keyboard():
     return ReplyKeyboardMarkup([["🔙 بازگشت به صفحه اصلی"]], resize_keyboard=True)
 
-# ==================== کیبورد انصراف پشتیبانی ====================
 def support_cancel_keyboard():
     return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
 
-# ==================== کیبورد بانک انتقال ====================
 def bank_menu():
     return ReplyKeyboardMarkup([
         ["💎 انتقال الماس"],
@@ -43,7 +40,7 @@ def admin_panel():
         ["📈 آمار ربات", "📨 ارسال پیام"],
         ["🎉 کد هدیه", "🏦 مبادلات سکه"],
         ["📌 تنظیم سفارش", "♻️ پنل‌ها"],
-        ["👤 ادمین‌ها", "🆔 آیدی‌یاب"],
+        ["👤 ادمین‌ها", "👥 مدیریت کاربران"],
         ["📇 تنظیم متن", "🆔 تنظیم کانال"],
         ["⚠️ اخطاردهی", "⚙️ زیرمجموعه‌گیری"],
         ["🎗 تکمیل سفارش", "🛐 پیگیری کاربر"],
@@ -53,7 +50,6 @@ def admin_panel():
 
 # ==================== دکمه‌های شیشه‌ای ====================
 def inline(rows):
-    """rows = لیستی از لیست (text, callback_data) یا (text, url)"""
     keyboard = []
     for row in rows:
         line = []
