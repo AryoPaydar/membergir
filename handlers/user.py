@@ -315,7 +315,8 @@ async def check_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ==================== ⚖️ قوانین ====================
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
+    from bot_manager import get_setting
+    default = (
         "به بخش ⚖️ قوانین ممبرگیر هایو خوش آمدید.\n"
         "\n"
         "❗️ نکات مهم (با دقت بخوانید)❗️ :\n"
@@ -336,6 +337,7 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ بعد از پرداخت هزینه ، بسته مورد نظر توسط پشتیبانی به حساب شما واریز خواهد شد.\n"
         "جهت مشاوره یا سوال و خرید به پشتیبانی مراجعه کنید👇"
     )
+    text = get_setting("rules_text", default)
     await update.message.reply_text(
         text,
         reply_markup=rules_back_keyboard()
