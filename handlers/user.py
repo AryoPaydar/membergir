@@ -346,12 +346,14 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== 💡 راهنما ====================
 async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
+    from bot_manager import get_setting
+    default = (
         "💡 به بخش راهنمای استفاده از ربات خوش آمدید\n"
         "\n"
         "لطفا از دکمه های زیر سوال خود را پیدا کنید.\n"
         "همچنین میتوانید در صورت داشتن هر گونه سوال با مدیریت در ارتباط باشید."
     )
+    text = get_setting("help_text", default)
     
     keyboard = inline([
         [("💎 نحوه جمع آوری الماس", "help_collect")],
