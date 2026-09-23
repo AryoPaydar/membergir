@@ -566,17 +566,38 @@ async def contact_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== 💞 حمایت مالی ====================
 async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from bot_manager import get_setting
-    text = get_setting("support_text",
-        "💞 <b>حمایت مالی از ربات:</b>\n\n"
-        "از حمایت شما سپاسگزاریم 🙏\n\n"
-        "💳 شماره کارت: <code>0000-0000-0000-0000</code>\n"
-        "👤 به نام: مدیر ربات"
+    text = (
+        "💞 حمایت مالی از ربات:\n"
+        "\n"
+        "اگر از ربات های ما خوشتون اومد و دوست داشتین میتونین برای پیشرفت ربات ما همراهی کنین\n"
+        "همچنین میتونین ما رو یه پیتزا مهمون کنین تا خستگی از تنمون در بره\n"
+        "\n"
+        "البته بچه های محک هم فراموش نکنین"
     )
+    
+    keyboard = inline([
+        [("💞 حمایت مالی از ربات", "https://reymit.ir/bots_hive")],
+        [("🤝 حمایت مالی در محک", "https://mahak-charity.org/online-payment/")],
+        [("🔙 بازگشت به منوی اصلی", "support_back")],
+    ])
+    
     await update.message.reply_text(
         text,
-        parse_mode="HTML",
-        reply_markup=main_menu(is_admin(update.effective_user.id))
+        reply_markup=keyboard
+    )
+
+
+async def support_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        q.from_user.id,
+        "🏠 منوی اصلی",
+        reply_markup=main_menu(is_admin(q.from_user.id))
     )
 
 
@@ -598,6 +619,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return True
     if data == "go_to_shop":
         await go_to_shop(update, context)
+        return True
+    if data == "support_back":
+        await support_back(update, context)
         return True
     if data == "help_collect":
         await help_collect(update, context)
