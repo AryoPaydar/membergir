@@ -107,7 +107,7 @@ async def on_message(update: Update, context):
         logger.info(f"✅ Created user {user_tg.id}")
     
     # ۱. State کاربر
-    for module in (history, gift, ads, transfer, referral, shop, panel, orders_history):
+    for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             try:
                 if await module.handle_state(update, context):
