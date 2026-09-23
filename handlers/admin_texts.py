@@ -15,8 +15,12 @@ async def texts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [("متن بنر زیرمجموعه", "admin_set_text:referral_text")],
             [("متن قوانین", "admin_set_text:rules_text")],
             [("متن خاموشی ربات", "admin_set_text:power_text")],
-            [("متن راهنمای /help", "admin_set_text:help_text")],
-            [("متن سفارش ممبر", "admin_set_text:order_intro_text")],
+            [("🔷 تنظیمات حمایت مالی 🔷", "admin_set_text:noop")],
+            [("متن حمایت مالی", "admin_set_text:support_text")],
+            [("لینک حمایت ربات", "admin_set_text:support_link_bot")],
+            [("لینک حمایت محک", "admin_set_text:support_link_mahak")],
+            [("🔷 تنظیمات سفارش کانال 🔷", "admin_set_text:noop")],
+            [("متن دکمه سفارش کانال", "admin_set_text:order_btn_text")],
             [("🔙 بازگشت", "admin_back")],
         ])
     )
@@ -26,6 +30,10 @@ async def edit_text_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     key = q.data.split(":", 1)[1]
+    
+    if key == "noop":
+        return
+    
     current = get_setting(key, "(خالی)")
     set_user_state(q.from_user.id, "admin_edit_text", {"key": key})
     await q.message.edit_text(
