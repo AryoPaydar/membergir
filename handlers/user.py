@@ -7,7 +7,9 @@ from bot_manager import (
     add_coins, get_daily_gift, is_admin, is_banned, check_membership,
     get_panel_config
 )
-from utils.keyboards import main_menu, back_button, inline, rules_back_keyboard, support_cancel_keyboard
+from utils.keyboards import (
+    main_menu, back_button, inline, rules_back_keyboard, support_cancel_keyboard
+)
 from utils.texts import start_text, account_text
 from utils.helpers import now_ts, jalali_now
 
@@ -498,38 +500,6 @@ async def help_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== 💞 حمایت مالی ====================
-async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "💞 حمایت مالی از ربات:\n"
-        "\n"
-        "اگر از ربات های ما خوشتون اومد و دوست داشتین میتونین برای پیشرفت ربات ما همراهی کنین\n"
-        "همچنین میتونین ما رو یه پیتزا مهمون کنین تا خستگی از تنمون در بره\n"
-        "\n"
-        "البته بچه های محک هم فراموش نکنین"
-    )
-    keyboard = inline([
-        [("💞 حمایت مالی از ربات", "https://reymit.ir/bots_hive")],
-        [("🤝 حمایت مالی در محک", "https://mahak-charity.org/online-payment/")],
-        [("🔙 بازگشت به منوی اصلی", "support_back")],
-    ])
-    await update.message.reply_text(text, reply_markup=keyboard)
-
-
-async def support_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    try:
-        await q.message.delete()
-    except Exception:
-        pass
-    await context.bot.send_message(
-        q.from_user.id,
-        "🏠 منوی اصلی",
-        reply_markup=main_menu(is_admin(q.from_user.id))
-    )
-
-
 # ==================== 📨 ارتباط با مدیریت ====================
 async def contact_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
@@ -538,10 +508,12 @@ async def contact_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "در صورتی که انتقاد یا پیشنهادی داشتید میتوانید از 📧 ارسال پیام استفاده کنید\n"
         "برای مشاهده پیام مدیریت نیز میتوانید از 📩 صندوق دریافت استفاده نمایید"
     )
+    
     keyboard = inline([
         [("📧 ارسال پیام", "support_send"), ("📩 صندوق دریافت", "support_inbox")],
         [("🔙 منوی اصلی", "support_home")],
     ])
+    
     await update.message.reply_text(text, reply_markup=keyboard)
 
 
@@ -609,13 +581,54 @@ async def support_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== State Handler (کاربر) ====================
+# ==================== 💞 حمایت مالی ====================
+async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "💞 حمایت مالی از ربات:\n"
+        "\n"
+        "اگر از ربات های ما خوشتون اومد و دوست داشتین میتونین برای پیشرفت ربات ما همراهی کنین\n"
+        "همچنین میتونین ما رو یه پیتزا مهمون کنین تا خستگی از تنمون در بره\n"
+        "\n"
+        "البته بچه های محک هم فراموش نکنین"
+    )
+    
+    keyboard = inline([
+        [("💞 حمایت مالی از ربات", "https://reymit.ir/bots_hive")],
+        [("🤝 حمایت مالی در محک", "https://mahak-charity.org/online-payment/")],
+        [("🔙 بازگشت به منوی اصلی", "support_back")],
+    ])
+    
+    await update.message.reply_text(text, reply_markup=keyboard)
+
+
+async def support_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        q.from_user.id,
+        "🏠 منوی اصلی",
+        reply_markup=main_menu(is_admin(q.from_user.id))
+    )
+
+
+# ==================== State Handler ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
     state, data = get_user_state(user_id)
     text = (update.message.text or "").strip()
     
-    # ===== State کاربر =====
+    if not state or state == "none":
+        # Gift state
+        from handlers import gift
+        if await gift.handle_state(update, context):
+            return True
+        return False
+    
+    # ==== State پشتیبانی ====
     if state == "support_msg_input":
         if text == "🔙 انصراف":
             set_user_state(user_id, "none")
@@ -635,7 +648,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         
         set_user_state(user_id, "none")
         
-        # پیام تأیید به کاربر
+        # پیام تأیید به کاربر + منوی اصلی
         await update.message.reply_text(
             "پیام شما به مدیریت ارسال شد.\n"
             "\n"
@@ -661,7 +674,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         
         return True
     
-    # ===== State gift =====
+    # ==== State gift ====
     from handlers import gift
     if await gift.handle_state(update, context):
         return True
