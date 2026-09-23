@@ -571,6 +571,72 @@ async def power_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
+# ==================== نمایش پیام پشتیبانی ====================
+async def view_support_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    
+    if not is_admin(user_id):
+        await q.answer("❌ دسترسی ندارید.", show_alert=True)
+        return
+    
+    msg_id = int(q.data.split(":")[1])
+    
+    with db.conn() as c:
+        m = c.execute("SELECT * FROM support_messages WHERE id = ?", (msg_id,)).fetchone()
+        if not m:
+            await q.answer("❌ پیام یافت نشد.", show_alert=True)
+            return
+        m = dict(m)
+    
+    msg_user = get_user(m["user_id"])
+    name = msg_user.get("first_name") if msg_user else "کاربر"
+    
+    text = (
+        f"📧 <b>پیام از کاربر</b>\n\n"
+        f"👤 نام: {name}\n"
+        f"🆔 آیدی: <code>{m['user_id']}</code>\n"
+        f"📆 تاریخ: {m['created_at']}\n"
+        f"\n"
+        f"📝 متن پیام:\n"
+        f"{m['message']}"
+    )
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("🔙 بازگشت", "back")]
+        ])
+    )
+
+
+async def view_user_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    admin_id = q.from_user.id
+    
+    if not is_admin(admin_id):
+        await q.answer("❌ دسترسی ندارید.", show_alert=True)
+        return
+    
+    target_id = int(q.data.split(":")[1])
+    user = get_user(target_id)
+    if not user:
+        await q.message.reply_text("❌ کاربر یافت نشد.")
+        return
+    
+    from utils.texts import account_text
+    text = account_text(user)
+    
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([[("🔙 بازگشت", "back")]])
+    )
+
+
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """پردازش state ادمین — True اگه هندل شد"""
     user = update.effective_user
@@ -748,6 +814,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         from bot_manager import set_user_state
         set_user_state(user.id, "set_power_text")
         await q.message.reply_text("📝 متن خاموشی را ارسال کنید:")
+        return True
+    if data.startswith("view_support_msg:"):
+        await view_support_msg(update, context)
+        return True
+    if data.startswith("view_user_profile:"):
+        await view_user_profile(update, context)
         return True
     return False
 
