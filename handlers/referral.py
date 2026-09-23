@@ -7,6 +7,7 @@ from utils.helpers import is_positive_int
 
 # ==================== منوی زیرمجموعه‌گیری ====================
 async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from bot_manager import get_setting
     user = update.effective_user
     db_user = get_user(user.id)
     
@@ -14,24 +15,21 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("لطفاً /start را بزنید.")
         return
     
-    # چک تنظیمات
     if get_setting("referral_enabled", "on") != "on":
         await update.message.reply_text("❌ زیرمجموعه‌گیری غیرفعال است.")
         return
     
-    # مقادیر پنل‌ها از Config
     normal_invite = Config.PANELS["عادی"]["invite_coin"]
     pro_invite = Config.PANELS["حرفه ای"]["invite_coin"]
     vip_invite = Config.PANELS["ویژه"]["invite_coin"]
     
-    # درصد پورسانت (فرضی - از تنظیمات یا ثابت)
     normal_percent = 5
     pro_percent = 10
     vip_percent = 15
     
     ads_channel = Config.ADS_CHANNEL or ""
     
-    text = (
+    default = (
         f"پنل معمولی(🥉):\n"
         f"(❗️برای همه کاربران فعال هست!)\n"
         f"💎الماس زیرمجموعه گیری : {normal_invite}\n"
@@ -53,11 +51,13 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🫂جهت دریافت لینک زیر مجموعه گیری خود روی دکمه زیر کلیک کنید👇"
     )
     
+    text = get_setting("referral_text", default)
+    
     await update.message.reply_text(
         text,
         parse_mode="HTML",
         reply_markup=inline([
-            [("🔰 دریافت بنر زیرمجموعه گیری", "share_referral_banner")],
+            [("🔰 دریافت بنر زیرمجموعه گیری", "referral_banner")],
             [("🔙 بازگشت", "referral_back")],
         ])
     )
