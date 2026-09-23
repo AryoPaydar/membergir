@@ -48,7 +48,7 @@ ADMIN_BUTTONS = {
     "📌 تنظیم سفارش": admin_orders.orders_menu,
     "♻️ پنل‌ها": admin_panels.panels_menu,
     "👤 ادمین‌ها": admin.admins_menu,
-    "🆔 آیدی‌یاب": admin.id_finder,
+    "👥 مدیریت کاربران": admin_user_info.users_menu,
     "📇 تنظیم متن": admin_texts.texts_menu,
     "📇 تنظیم متن‌ها": admin_texts.texts_menu,
     "🆔 تنظیم کانال": admin_channels.channels_menu,
@@ -106,7 +106,7 @@ async def on_message(update: Update, context):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
         logger.info(f"✅ Created user {user_tg.id}")
     
-    # ۱. State کاربر
+    # ۱. State کاربر — user اول
     for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             try:
@@ -203,10 +203,11 @@ async def on_callback(update: Update, context):
         return
     
     modules = [
+        admin_user_info,   # 👈 کاربر اول — چون callback های کاربر اینجاست
         history,
         orders_history,
         gift, ads, user, admin,
-        admin_coins, admin_user_info, admin_complete, admin_channels,
+        admin_coins, admin_complete, admin_channels,
         admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
         transfer, referral, shop, panel, top,
         admin_shop, admin_texts,
