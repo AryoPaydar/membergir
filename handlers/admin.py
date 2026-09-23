@@ -12,6 +12,7 @@ from database import db
 from datetime import datetime
 import math
 import json
+import jdatetime
 
 async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -591,13 +592,29 @@ async def view_support_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         m = dict(m)
     
     msg_user = get_user(m["user_id"])
-    name = msg_user.get("first_name") if msg_user else "کاربر"
+    if msg_user:
+        name = msg_user.get("first_name") or "کاربر"
+        username = f"@{msg_user['username']}" if msg_user.get("username") else "ندارد"
+        uid = msg_user["user_id"]
+    else:
+        name = "کاربر"
+        username = "ندارد"
+        uid = m["user_id"]
+    
+    # تاریخ شمسی
+    try:
+        dt = datetime.strptime(str(m["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
+        date_jalali = jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d %H:%M")
+    except Exception:
+        date_jalali = str(m["created_at"])[:16]
     
     text = (
-        f"📧 <b>پیام از کاربر</b>\n\n"
-        f"👤 نام: {name}\n"
-        f"🆔 آیدی: <code>{m['user_id']}</code>\n"
-        f"📆 تاریخ: {m['created_at']}\n"
+        f"📧 <b>پیام از کاربر</b>\n"
+        f"\n"
+        f"🔰 نام کاربری : <b>{name}</b>\n"
+        f"🆔 یوزرنیم : {username}\n"
+        f"🫆 شماره کاربری : <code>{uid}</code>\n"
+        f"📆 تاریخ: {date_jalali}\n"
         f"\n"
         f"📝 متن پیام:\n"
         f"{m['message']}"
@@ -607,8 +624,42 @@ async def view_support_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text,
         parse_mode="HTML",
         reply_markup=inline([
-            [("🔙 بازگشت", "back")]
+            [("💬 پاسخ به کاربر", f"support_reply:{msg_id}")],
+            [("🔙 بازگشت", "back")],
         ])
+    )
+
+
+async def support_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """شروع پاسخ به کاربر"""
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+    
+    if not is_admin(user_id):
+        await q.answer("❌ دسترسی ندارید.", show_alert=True)
+        return
+    
+    msg_id = int(q.data.split(":")[1])
+    
+    with db.conn() as c:
+        m = c.execute("SELECT * FROM support_messages WHERE id = ?", (msg_id,)).fetchone()
+        if not m:
+            await q.answer("❌ پیام یافت نشد.", show_alert=True)
+            return
+        m = dict(m)
+    
+    from bot_manager import set_user_state
+    set_user_state(user_id, "support_reply_input", {"msg_id": msg_id})
+    
+    msg_user = get_user(m["user_id"])
+    name = msg_user.get("first_name") if msg_user else "کاربر"
+    
+    await q.message.reply_text(
+        f"💬 پاسخ به {name}:\n"
+        f"\n"
+        f"لطفا متن پاسخ خود را وارد نمایید :",
+        reply_markup=back_button()
     )
 
 
@@ -706,6 +757,53 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     
     if state == "bc_search_channel":
         await handle_bc_channel_search(update, context, text)
+        return True
+    
+    # ==== پاسخ به پشتیبانی ====
+    if state == "support_reply_input":
+        if text == "🔙 بازگشت":
+            set_user_state(user.id, "none")
+            await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
+            return True
+        
+        msg_id = data.get("msg_id")
+        
+        with db.conn() as c:
+            m = c.execute("SELECT * FROM support_messages WHERE id = ?", (msg_id,)).fetchone()
+            if not m:
+                await msg.reply_text("❌ پیام یافت نشد.")
+                set_user_state(user.id, "none")
+                return True
+            m = dict(m)
+            
+            # ذخیره پاسخ
+            c.execute(
+                "UPDATE support_messages SET reply = ?, status = 'replied' WHERE id = ?",
+                (text, msg_id)
+            )
+        
+        set_user_state(user.id, "none")
+        
+        # ارسال پاسخ به کاربر
+        try:
+            await context.bot.send_message(
+                m["user_id"],
+                f"📨 <b>پاسخ مدیریت به پیام شما:</b>\n"
+                f"\n"
+                f"📝 پیام شما:\n"
+                f"{m['message']}\n"
+                f"\n"
+                f"💬 پاسخ مدیریت:\n"
+                f"{text}",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+        
+        await msg.reply_text(
+            f"✅ پاسخ شما به کاربر ارسال شد.",
+            reply_markup=admin_panel()
+        )
         return True
     
     return False
@@ -818,6 +916,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data.startswith("view_support_msg:"):
         await view_support_msg(update, context)
         return True
+    if data.startswith("support_reply:"):
+        await support_reply(update, context)
+        return True
     if data.startswith("view_user_profile:"):
         await view_user_profile(update, context)
         return True
@@ -834,9 +935,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
     if not is_admin(update.effective_user.id):
         return False
     
-    # کد هدیه جدا هندل میشه
     if text == "🎉 کد هدیه":
-        return False  # توی main.py هندل میشه
+        return False
     
     ADMIN_BUTTONS = {
         "📈 آمار ربات": stats,
