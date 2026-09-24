@@ -6,7 +6,7 @@ class Database:
     def __init__(self, path=None):
         self.path = path or Config.DB_PATH
         self._init_db()
-    
+
     @contextmanager
     def conn(self):
         """Context manager برای اتصال امن به دیتابیس"""
@@ -21,7 +21,7 @@ class Database:
             raise
         finally:
             connection.close()
-    
+
     def _init_db(self):
         """ساخت جداول در اولین اجرا"""
         with self.conn() as c:
@@ -58,7 +58,7 @@ class Database:
                     hourly_earned   INTEGER DEFAULT 0
                 )
             """)
-            
+
             # === اضافه کردن ستون‌های جدید به دیتابیس موجود ===
             existing_columns = [row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()]
             new_columns = {
@@ -78,7 +78,7 @@ class Database:
                         c.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
                     except Exception:
                         pass
-            
+
             # === سفارشات ممبر ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS orders (
@@ -96,7 +96,7 @@ class Database:
                     FOREIGN KEY (admin_id) REFERENCES users(user_id)
                 )
             """)
-            
+
             # === اعضای سفارش ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS order_members (
@@ -109,7 +109,7 @@ class Database:
                     FOREIGN KEY (order_id) REFERENCES orders(id)
                 )
             """)
-            
+
             # === گزارشات سفارش ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS order_reports (
@@ -121,7 +121,7 @@ class Database:
                     UNIQUE(order_id, reporter_id)
                 )
             """)
-            
+
             # === تراکنش‌ها ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS transactions (
@@ -134,7 +134,7 @@ class Database:
                     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             # === کدهای هدیه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS gift_codes (
@@ -152,7 +152,7 @@ class Database:
                     is_active           INTEGER DEFAULT 1
                 )
             """)
-            
+
             # === اضافه کردن ستون‌های جدید به gift_codes ===
             gift_cols = [r[1] for r in c.execute("PRAGMA table_info(gift_codes)").fetchall()]
             if "id" not in gift_cols:
@@ -173,7 +173,7 @@ class Database:
                         is_active           INTEGER DEFAULT 1
                     )
                 """)
-            
+
             # === دریافت‌کنندگان کد هدیه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS gift_code_users (
@@ -185,7 +185,7 @@ class Database:
                     FOREIGN KEY (code_id) REFERENCES gift_codes(id)
                 )
             """)
-            
+
             # === تنظیمات فروشگاه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS shop_items (
@@ -199,7 +199,7 @@ class Database:
                     position    INTEGER
                 )
             """)
-            
+
             # === آیتم‌های سفارش ممبر ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS order_items (
@@ -210,7 +210,7 @@ class Database:
                     position    INTEGER
                 )
             """)
-            
+
             # === اضافه کردن پیش‌فرض‌های order_items ===
             default_items = [
                 ("item_20",  "👤 20 ممبر",   20,  40,  1),
@@ -225,7 +225,7 @@ class Database:
                     INSERT OR IGNORE INTO order_items (key, name, members, coins, position)
                     VALUES (?, ?, ?, ?, ?)
                 """, (key, name, members, coins, pos))
-            
+
             # === متن‌ها و تنظیمات ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
@@ -233,7 +233,7 @@ class Database:
                     value       TEXT
                 )
             """)
-            
+
             # === مدیران ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS admins (
@@ -242,7 +242,7 @@ class Database:
                     added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             # === کانال‌ها و گروه‌های ربات ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS bot_chats (
@@ -253,7 +253,7 @@ class Database:
                     added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             # === پیام‌های پشتیبانی ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS support_messages (
@@ -266,7 +266,38 @@ class Database:
                     seen_at     TIMESTAMP
                 )
             """)
-            
+
+            # === کانال های اسپانسر ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS sponsor_channels (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel     TEXT NOT NULL UNIQUE,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # === کانال های ممنوعه ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS banned_channels (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel     TEXT NOT NULL UNIQUE,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # === کانال های Ads ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS ads_channels (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel       TEXT NOT NULL UNIQUE,
+                    display_name  TEXT NOT NULL,
+                    remaining     INTEGER DEFAULT 0,
+                    position      INTEGER DEFAULT 0,
+                    last_shown_at INTEGER DEFAULT 0,
+                    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # === ایندکس‌ها ===
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_admin ON orders(admin_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
@@ -279,7 +310,9 @@ class Database:
             c.execute("CREATE INDEX IF NOT EXISTS idx_gift_type ON gift_codes(type)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_support_user ON support_messages(user_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_support_status ON support_messages(status)")
-            
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ads_position ON ads_channels(position)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ads_last_shown ON ads_channels(last_shown_at)")
+
             # === ادمین اصلی ===
             c.execute(
                 "INSERT OR IGNORE INTO admins (user_id) VALUES (?)",
