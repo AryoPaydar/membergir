@@ -271,11 +271,26 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order_btn_text = order_btn_template.replace("{members}", str(members))
 
     # چک کانال Ads — اگه وجود داشت به جای دکمه سفارش نمایش بده
-    from handlers import admin_ads_channels
-    ads_ch = admin_ads_channels.get_next_ads_channel()
-    if ads_ch:
-        order_btn_text = f"ᵃᵈˢ {ads_ch['display_name']}"
+# چک کانال Ads — اگه وجود داشت به جای دکمه سفارش نمایش بده
+from handlers import admin_ads_channels
+ads_ch = admin_ads_channels.get_next_ads_channel()
 
+if ads_ch:
+    order_btn_text = f"ᵃᵈˢ {ads_ch['display_name']}"
+    ads_channel = ads_ch['channel']
+    # اگه با @ شروع میشه یا یوزرنیم معمولیه → لینک t.me
+    if ads_channel.startswith("@") or not ads_channel.startswith("+"):
+        ads_url = f"https://t.me/{ads_channel.lstrip('@')}"
+    else:
+        # لینک خصوصی
+        ads_url = f"https://t.me/{ads_channel}"
+    button = inline([
+        [(order_btn_text, ads_url)],
+        [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
+        [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
+    ])
+else:
+    order_btn_text = order_btn_template.replace("{members}", str(members))
     button = inline([
         [(order_btn_text, "noop")],
         [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
