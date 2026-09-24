@@ -11,7 +11,6 @@ from datetime import datetime
 import jdatetime
 
 
-# ==================== چک آیدی کانال ====================
 def _is_valid_channel_id(text: str) -> tuple:
     text = text.strip()
     if text.startswith("@"):
@@ -156,7 +155,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_admin(q.from_user.id):
         return False
 
-    # ==== تنظیم کانال تبلیغات ====
     if data == "ach_set_ads":
         await q.answer()
         set_user_state(q.from_user.id, "ach_set_ads")
@@ -171,7 +169,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return True
 
-    # ==== تنظیم کانال کد هدیه ====
     if data == "ach_set_gift":
         await q.answer()
         set_user_state(q.from_user.id, "ach_set_gift")
@@ -369,10 +366,5 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except Exception:
             pass
         return True
-
-    # ============ کانال Ads — پاس به admin_ads_channels ============
-    if data == "aads_menu" or data.startswith("aads_"):
-        from handlers import admin_ads_channels
-        return await admin_ads_channels.handle_callback(update, context)
 
     return False
