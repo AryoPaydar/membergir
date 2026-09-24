@@ -203,14 +203,16 @@ async def on_callback(update: Update, context):
         return
     
     modules = [
-        admin_user_info,   # 👈 کاربر اول — چون callback های کاربر اینجاست
-        history,
-        orders_history,
-        gift, ads, user, admin,
-        admin_coins, admin_complete, admin_ads_channels, admin_channels,
-        admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
-        transfer, referral, shop, panel, top,
-        admin_shop, admin_texts,
+    admin_user_info,   # 👈 کاربر اول — چون callback های کاربر اینجاست
+    history,
+    orders_history,
+    gift, ads, user, admin,
+    admin_coins, admin_complete,
+    admin_ads_channels,   # 👈 این خط اضافه بشه (قبل از admin_channels)
+    admin_channels,
+    admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
+    transfer, referral, shop, panel, top,
+    admin_shop, admin_texts,
     ]
     for module in modules:
         if hasattr(module, "handle_callback"):
