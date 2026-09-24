@@ -2,6 +2,7 @@ import sqlite3
 from contextlib import contextmanager
 from config import Config
 
+
 class Database:
     def __init__(self, path=None):
         self.path = path or Config.DB_PATH
@@ -9,7 +10,6 @@ class Database:
 
     @contextmanager
     def conn(self):
-        """Context manager برای اتصال امن به دیتابیس"""
         connection = sqlite3.connect(self.path, timeout=10)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -23,7 +23,6 @@ class Database:
             connection.close()
 
     def _init_db(self):
-        """ساخت جداول در اولین اجرا"""
         with self.conn() as c:
             # === کاربران ===
             c.execute("""
@@ -59,7 +58,6 @@ class Database:
                 )
             """)
 
-            # === اضافه کردن ستون‌های جدید به دیتابیس موجود ===
             existing_columns = [row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()]
             new_columns = {
                 "total_earned": "INTEGER DEFAULT 0",
@@ -153,7 +151,6 @@ class Database:
                 )
             """)
 
-            # === اضافه کردن ستون‌های جدید به gift_codes ===
             gift_cols = [r[1] for r in c.execute("PRAGMA table_info(gift_codes)").fetchall()]
             if "id" not in gift_cols:
                 c.execute("DROP TABLE IF EXISTS gift_codes")
@@ -174,7 +171,6 @@ class Database:
                     )
                 """)
 
-            # === دریافت‌کنندگان کد هدیه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS gift_code_users (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,7 +182,7 @@ class Database:
                 )
             """)
 
-            # === تنظیمات فروشگاه ===
+            # === فروشگاه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS shop_items (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,7 +207,6 @@ class Database:
                 )
             """)
 
-            # === اضافه کردن پیش‌فرض‌های order_items ===
             default_items = [
                 ("item_20",  "👤 20 ممبر",   20,  40,  1),
                 ("item_10",  "👤 10 ممبر",   10,  20,  2),
@@ -226,7 +221,7 @@ class Database:
                     VALUES (?, ?, ?, ?, ?)
                 """, (key, name, members, coins, pos))
 
-            # === متن‌ها و تنظیمات ===
+            # === تنظیمات ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     key         TEXT PRIMARY KEY,
@@ -234,7 +229,7 @@ class Database:
                 )
             """)
 
-            # === مدیران ===
+            # === ادمین‌ها ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS admins (
                     user_id     INTEGER PRIMARY KEY,
@@ -243,7 +238,7 @@ class Database:
                 )
             """)
 
-            # === کانال‌ها و گروه‌های ربات ===
+            # === کانال‌ها/گروه‌های ربات ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS bot_chats (
                     chat_id     INTEGER PRIMARY KEY,
@@ -254,7 +249,7 @@ class Database:
                 )
             """)
 
-            # === پیام‌های پشتیبانی ===
+            # === پشتیبانی ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS support_messages (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -267,7 +262,7 @@ class Database:
                 )
             """)
 
-            # === کانال های اسپانسر ===
+            # === کانال اسپانسر ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS sponsor_channels (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -276,7 +271,7 @@ class Database:
                 )
             """)
 
-            # === کانال های ممنوعه ===
+            # === کانال ممنوعه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS banned_channels (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -285,18 +280,27 @@ class Database:
                 )
             """)
 
-            # === کانال های Ads ===
+            # === کانال Ads ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS ads_channels (
-                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                    channel       TEXT NOT NULL UNIQUE,
-                    display_name  TEXT NOT NULL,
-                    remaining     INTEGER DEFAULT 0,
-                    position      INTEGER DEFAULT 0,
-                    last_shown_at INTEGER DEFAULT 0,
-                    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel             TEXT NOT NULL UNIQUE,
+                    display_name        TEXT NOT NULL,
+                    remaining           INTEGER DEFAULT 0,
+                    original_remaining  INTEGER DEFAULT 0,
+                    position            INTEGER DEFAULT 0,
+                    last_shown_at       INTEGER DEFAULT 0,
+                    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # اگه جدول قدیمی بدون original_remaining هست، اضافه کن
+            ads_cols = [r[1] for r in c.execute("PRAGMA table_info(ads_channels)").fetchall()]
+            if "original_remaining" not in ads_cols:
+                try:
+                    c.execute("ALTER TABLE ads_channels ADD COLUMN original_remaining INTEGER DEFAULT 0")
+                except Exception:
+                    pass
 
             # === ایندکس‌ها ===
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_admin ON orders(admin_id)")
@@ -318,5 +322,6 @@ class Database:
                 "INSERT OR IGNORE INTO admins (user_id) VALUES (?)",
                 (Config.ADMIN_ID,)
             )
+
 
 db = Database()
