@@ -56,7 +56,7 @@ ADMIN_BUTTONS = {
     "⚠️ اخطاردهی": admin.warn_user,
     "⚙️ زیرمجموعه‌گیری": admin_referral.referral_menu,
     "🎗 تکمیل سفارش": admin_complete.complete_menu,
-    "🛐 پیگیری کاربر": admin_user_info.user_info,
+    "🔮 جستجوگر": admin_user_info.search_menu,   # 👈 جدید
     "✂️ تنظیمات لغو": admin_cancel.cancel_menu,
     "💳 تنظیمات انتقال": admin_transfer.transfer_menu,
     "🔕 خاموش/روشن": admin.power_menu,
