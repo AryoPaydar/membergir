@@ -207,7 +207,7 @@ async def on_callback(update: Update, context):
         history,
         orders_history,
         gift, ads, user, admin,
-        admin_coins, admin_complete, admin_channels,
+        admin_coins, admin_complete, admin_ads_channels, admin_channels,
         admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
         transfer, referral, shop, panel, top,
         admin_shop, admin_texts,
