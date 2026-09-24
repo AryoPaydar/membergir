@@ -15,17 +15,30 @@ def main_menu(is_admin=False):
         rows.append(["👑 پنل مدیریت"])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
+
 def back_button():
     return ReplyKeyboardMarkup([["🔙 بازگشت"]], resize_keyboard=True)
+
 
 def gift_user_back_keyboard():
     return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
 
+
 def rules_back_keyboard():
     return ReplyKeyboardMarkup([["🔙 بازگشت به صفحه اصلی"]], resize_keyboard=True)
 
+
 def support_cancel_keyboard():
     return ReplyKeyboardMarkup([["🔙 انصراف"]], resize_keyboard=True)
+
+
+def admin_back_keyboard():
+    """کیبورد بازگشت به پنل مدیریت (برای زیرمنوهای ادمین)"""
+    return ReplyKeyboardMarkup(
+        [["🔙 بازگشت به پنل مدیریت"]],
+        resize_keyboard=True
+    )
+
 
 def bank_menu():
     return ReplyKeyboardMarkup([
@@ -33,6 +46,7 @@ def bank_menu():
         ["📥 تاریخچه دریافت", "📤 تاریخچه انتقال"],
         ["🔙 بازگشت به منوی اصلی"],
     ], resize_keyboard=True)
+
 
 # ==================== کیبورد پنل ادمین ====================
 def admin_panel():
@@ -43,10 +57,11 @@ def admin_panel():
         ["👤 ادمین‌ها", "👥 مدیریت کاربران"],
         ["📇 تنظیم متن", "🆔 تنظیم کانال"],
         ["⚠️ اخطاردهی", "⚙️ زیرمجموعه‌گیری"],
-        ["🎗 تکمیل سفارش", "🛐 پیگیری کاربر"],
+        ["🎗 تکمیل سفارش", "🔮 جستجوگر"],
         ["✂️ تنظیمات لغو", "💳 تنظیمات انتقال"],
         ["🔕 خاموش/روشن", "🔙 بازگشت به منو"],
     ], resize_keyboard=True)
+
 
 # ==================== دکمه‌های شیشه‌ای ====================
 def inline(rows):
@@ -64,6 +79,7 @@ def inline(rows):
                     line.append(InlineKeyboardButton(text, callback_data=data))
         keyboard.append(line)
     return InlineKeyboardMarkup(keyboard)
+
 
 def confirm_cancel(order_id):
     return inline([
