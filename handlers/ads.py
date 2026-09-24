@@ -96,14 +96,10 @@ def is_valid_at_channel(text: str) -> bool:
 
 # ==================== ساخت متن پست تبلیغات ====================
 def build_post_text(channel_title, channel_desc, channel):
-    """ساخت متن پست تبلیغات — اگه توضیحات خالی بود، نمایش داده نمیشود"""
     text = f"‼️نام کانال : {channel_title}\n"
-
     if channel_desc and channel_desc.strip() and channel_desc.strip() != "ندارد":
         text += f"\n📝توضیحات کانال: {channel_desc}\n"
-
     text += f"\n🆔@{channel}"
-
     return text
 
 
@@ -131,7 +127,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     channel = text[1:]
 
-    # ==== چک کانال ممنوعه ====
+    # چک کانال ممنوعه
     with db.conn() as c:
         banned = c.execute(
             "SELECT 1 FROM banned_channels WHERE channel = ?", (channel,)
@@ -218,7 +214,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channel_title = data.get("channel_title", "")
     channel_desc = data.get("channel_desc", "")
 
-    # چک مجدد کانال ممنوعه (به خاطر race condition)
+    # چک مجدد کانال ممنوعه
     with db.conn() as c:
         banned = c.execute(
             "SELECT 1 FROM banned_channels WHERE channel = ?", (channel,)
@@ -244,7 +240,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    # ۱. کسر اتمیک سکه
+    # کسر اتمیک سکه
     if not remove_coins(user_id, coins, "order_create", "ثبت سفارش"):
         await context.bot.send_message(
             user_id,
@@ -254,7 +250,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_user_state(user_id, "none")
         return
 
-    # ۲. ثبت سفارش
+    # ثبت سفارش
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
@@ -262,42 +258,39 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (user_id, channel, channel_id, None, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
 
-    # ۳. ساخت متن پست با دکمه‌های جدید
     post_text = build_post_text(channel_title, channel_desc, channel)
 
     bot_username = (await context.bot.get_me()).username
 
-    order_btn_template = get_setting("order_btn_text", "👤 سفارش {members} ممبر")
-    order_btn_text = order_btn_template.replace("{members}", str(members))
-
     # چک کانال Ads — اگه وجود داشت به جای دکمه سفارش نمایش بده
-# چک کانال Ads — اگه وجود داشت به جای دکمه سفارش نمایش بده
-from handlers import admin_ads_channels
-ads_ch = admin_ads_channels.get_next_ads_channel()
+    from handlers import admin_ads_channels
+    ads_ch = admin_ads_channels.get_next_ads_channel()
 
-if ads_ch:
-    order_btn_text = f"ᵃᵈˢ {ads_ch['display_name']}"
-    ads_channel = ads_ch['channel']
-    # اگه با @ شروع میشه یا یوزرنیم معمولیه → لینک t.me
-    if ads_channel.startswith("@") or not ads_channel.startswith("+"):
-        ads_url = f"https://t.me/{ads_channel.lstrip('@')}"
+    if ads_ch:
+        order_btn_text = f"ᵃᵈˢ {ads_ch['display_name']}"
+        ads_channel = ads_ch['channel']
+        if ads_channel.startswith("@"):
+            ads_url = f"https://t.me/{ads_channel.lstrip('@')}"
+        elif ads_channel.startswith("+"):
+            ads_url = f"https://t.me/{ads_channel}"
+        else:
+            ads_url = f"https://t.me/{ads_channel}"
+
+        button = inline([
+            [(order_btn_text, ads_url)],
+            [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
+            [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
+        ])
     else:
-        # لینک خصوصی
-        ads_url = f"https://t.me/{ads_channel}"
-    button = inline([
-        [(order_btn_text, ads_url)],
-        [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
-        [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
-    ])
-else:
-    order_btn_text = order_btn_template.replace("{members}", str(members))
-    button = inline([
-        [(order_btn_text, "noop")],
-        [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
-        [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
-    ])
+        order_btn_template = get_setting("order_btn_text", "👤 سفارش {members} ممبر")
+        order_btn_text = order_btn_template.replace("{members}", str(members))
+        button = inline([
+            [(order_btn_text, "noop")],
+            [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
+            [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
+        ])
 
-    # ۴. ارسال به کانال — اگه fail شد، سکه برگردون
+    # ارسال به کانال
     try:
         post = await context.bot.send_message(
             f"@{Config.ADS_CHANNEL}",
