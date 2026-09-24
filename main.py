@@ -121,9 +121,10 @@ async def on_message(update: Update, context):
     if is_admin(user_tg.id):
         logger.info(f"👑 User {user_tg.id} is admin")
         admin_modules = (
-            admin, admin_shop, admin_texts, admin_coins, admin_user_info,
-            admin_complete, admin_channels, admin_cancel, admin_transfer,
-            admin_referral, admin_panels, admin_orders,
+    admin, admin_shop, admin_texts, admin_coins, admin_user_info,
+    admin_complete, admin_channels,
+    admin_ads_channels,   # 👈 این خط اضافه بشه (بعد از admin_channels)
+    admin_cancel, admin_transfer, admin_referral, admin_panels, admin_orders,
         )
         for module in admin_modules:
             if hasattr(module, "handle_state"):
