@@ -1,5 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from config import Config
 from database import db
 from bot_manager import is_admin, set_user_state, get_user_state
 from utils.keyboards import inline, back_button, admin_panel
@@ -25,9 +26,26 @@ def _is_valid_channel_id(text: str) -> tuple:
 def _format_jalali_date(created_at):
     try:
         dt = datetime.strptime(str(created_at)[:19], "%Y-%m-%d %H:%M:%S")
-        return jdatetime.date.fromgregorian(date=dt.date()).strftime("%Y/%m/%d")
+        return jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d %H:%M")
     except Exception:
-        return str(created_at)[:10]
+        return str(created_at)[:16]
+
+
+def _parse_count(text):
+    """
+    - "0"  → ('delete', 0)      حذف از لیست
+    - "00" → ('unlimited', -1)  نامحدود
+    - عدد  → ('limited', N)     تعداد محدود
+    - None → (None, None)       نامعتبر
+    """
+    text = text.strip()
+    if text == "00":
+        return "unlimited", -1
+    if text == "0":
+        return "delete", 0
+    if text.isdigit():
+        return "limited", int(text)
+    return None, None
 
 
 # ==================== منوی Ads ====================
@@ -51,7 +69,7 @@ async def ads_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rows = []
     for ch in chs:
-        remaining_text = "نامحدود" if ch["remaining"] == 0 else f"{ch['remaining']} بار"
+        remaining_text = "نامحدود" if ch["remaining"] == -1 else f"{ch['remaining']} بار"
         rows.append([
             (f"📢 {ch['display_name']} ({remaining_text})", f"aads_view:{ch['id']}")
         ])
@@ -81,7 +99,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
 
-    # مرحله ۱: دریافت لینک/آیدی
+    # مرحله ۱: لینک/آیدی
     if state == "aads_add_channel":
         valid, channel = _is_valid_channel_id(text)
         if not valid:
@@ -103,21 +121,32 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             return True
         set_user_state(user_id, "aads_add_count", {**data, "display_name": text})
         await update.message.reply_text(
-            "✅ نام نمایشی ثبت شد.\n\nحالا تعداد نمایش این کانال رو وارد کنید:\n\n"
-            "🔹 عدد وارد کنید (مثلاً 100): 100 بار نمایش داده میشه.\n"
-            "🔹 عدد 0: تا زمانی که حذف نشه، همیشه نمایش داده میشه.",
+            "✅ نام نمایشی ثبت شد.\n\n"
+            "🔢 تعداد نمایش رو وارد کنید:\n"
+            "• عدد مثبت (مثل 100): 100 بار نمایش داده میشه\n"
+            "• 00 : نامحدود (تا زمان حذف دستی)\n"
+            "• 0 : از لیست Ads حذف میشه",
             reply_markup=back_button()
         )
         return True
 
     # مرحله ۳: تعداد
     if state == "aads_add_count":
-        if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
+        kind, count = _parse_count(text)
+        if kind is None:
+            await update.message.reply_text("❌ فقط عدد مجاز است (0، 00 یا عدد مثبت).")
             return True
+
+        if kind == "delete":
+            await update.message.reply_text(
+                "❌ برای افزودن نمی‌توانید 0 بفرستید. از 00 برای نامحدود استفاده کنید.",
+                reply_markup=back_button()
+            )
+            return True
+
         channel = data.get("channel")
         display_name = data.get("display_name")
-        remaining = int(text)
+        remaining = count  # -1 = نامحدود، عدد مثبت = محدود
 
         with db.conn() as c:
             pos_row = c.execute("SELECT COALESCE(MAX(position), 0) as max_pos FROM ads_channels").fetchone()
@@ -133,7 +162,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 return True
 
         set_user_state(user_id, "none")
-        remaining_text = "نامحدود" if remaining == 0 else f"{remaining} بار"
+        remaining_text = "نامحدود" if remaining == -1 else f"{remaining} بار"
         await update.message.reply_text(
             f"✅ کانال Ads با موفقیت اضافه شد:\n\n"
             f"📢 کانال : {channel}\n"
@@ -157,15 +186,28 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     # ویرایش تعداد
     if state == "aads_edit_count":
-        if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
+        kind, count = _parse_count(text)
+        if kind is None:
+            await update.message.reply_text("❌ فقط عدد مجاز است (0، 00 یا عدد مثبت).")
             return True
+
         ch_id = data.get("ch_id")
-        count = int(text)
+
+        if kind == "delete":
+            with db.conn() as c:
+                c.execute("DELETE FROM ads_channels WHERE id = ?", (ch_id,))
+            set_user_state(user_id, "none")
+            await update.message.reply_text(
+                "✅ کانال از لیست Ads حذف شد.",
+                reply_markup=admin_panel()
+            )
+            return True
+
+        remaining = count
         with db.conn() as c:
-            c.execute("UPDATE ads_channels SET remaining = ? WHERE id = ?", (count, ch_id))
+            c.execute("UPDATE ads_channels SET remaining = ? WHERE id = ?", (remaining, ch_id))
         set_user_state(user_id, "none")
-        remaining_text = "نامحدود" if count == 0 else f"{count} بار"
+        remaining_text = "نامحدود" if remaining == -1 else f"{remaining} بار"
         await update.message.reply_text(f"✅ تعداد نمایش ویرایش شد: {remaining_text}", reply_markup=admin_panel())
         return True
 
@@ -179,7 +221,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_admin(q.from_user.id):
         return False
 
-    # ==== منوی Ads ====
     if data == "aads_menu":
         await q.answer()
         with db.conn() as c:
@@ -200,7 +241,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         rows = []
         for ch in chs:
-            remaining_text = "نامحدود" if ch["remaining"] == 0 else f"{ch['remaining']} بار"
+            remaining_text = "نامحدود" if ch["remaining"] == -1 else f"{ch['remaining']} بار"
             rows.append([
                 (f"📢 {ch['display_name']} ({remaining_text})", f"aads_view:{ch['id']}")
             ])
@@ -216,7 +257,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
 
-    # ==== افزودن کانال ====
     if data == "aads_add_btn":
         await q.answer()
         set_user_state(q.from_user.id, "aads_add_channel")
@@ -229,7 +269,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
 
-    # ==== مشاهده کانال ====
     if data.startswith("aads_view:"):
         await q.answer()
         ch_id = int(data.split(":")[1])
@@ -240,7 +279,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return True
         ch = dict(ch)
         date_jalali = _format_jalali_date(ch["created_at"])
-        remaining_text = "نامحدود" if ch["remaining"] == 0 else f"{ch['remaining']} بار"
+        remaining_text = "نامحدود" if ch["remaining"] == -1 else f"{ch['remaining']} بار"
         await q.message.edit_text(
             f"📢 <b>مشخصات کانال Ads</b>\n\n"
             f"🔗 کانال : {ch['channel']}\n"
@@ -257,7 +296,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return True
 
-    # ==== ویرایش نام ====
     if data.startswith("aads_edit_name:"):
         await q.answer()
         ch_id = int(data.split(":")[1])
@@ -271,21 +309,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
 
-    # ==== ویرایش تعداد ====
     if data.startswith("aads_edit_count:"):
         await q.answer()
         ch_id = int(data.split(":")[1])
         set_user_state(q.from_user.id, "aads_edit_count", {"ch_id": ch_id})
         try:
             await q.message.edit_text(
-                "🔢 تعداد نمایش جدید رو وارد کنید:\n\n🔹 عدد 0 = نامحدود",
+                "🔢 تعداد نمایش جدید رو وارد کنید:\n\n"
+                "• عدد مثبت (مثل 100): تعداد بار\n"
+                "• 00 : نامحدود\n"
+                "• 0 : حذف از لیست Ads",
                 reply_markup=inline([[("🔙 بازگشت", f"aads_view:{ch_id}")]])
             )
         except Exception:
             pass
         return True
 
-    # ==== حذف کانال ====
     if data.startswith("aads_del:"):
         ch_id = int(data.split(":")[1])
         with db.conn() as c:
@@ -304,20 +343,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 # ==================== تابع چرخشی برای ads.py ====================
-def get_next_ads_channel():
+def _notify_ads_complete(context, ch):
+    """ارسال پیام تکمیل به ادمین — این تابع از ads.py صدا زده میشه"""
+    pass  # پیام از داخل ads.py با await فرستاده میشه
+
+
+def get_next_ads_channel(context=None):
     """
     الگوریتم چرخشی:
-    - همه کانال‌ها به ترتیب position مرتب میشن
-    - اونایی که remaining != 0 و last_shown_at قدیمی‌ترن اولویت دارن
-    - اگه remaining=0 (نامحدود) باشه، همیشه توی چرخه میمونه
-    - هر بار که انتخاب میشه: 
-        * اگه remaining > 0: یک واحد کم میشه
-        * last_shown_at آپدیت میشه
+    - اگه remaining == -1 → نامحدود، همیشه میمونه
+    - اگه remaining > 0 → یک واحد کم میشه
+    - اگه remaining به 0 برسه → کانال حذف میشه + پیام تکمیل به ادمین
     """
     with db.conn() as c:
         chs = c.execute("""
             SELECT * FROM ads_channels
-            WHERE remaining = 0 OR remaining > 0
             ORDER BY last_shown_at ASC, position ASC
         """).fetchall()
 
@@ -326,15 +366,43 @@ def get_next_ads_channel():
 
         ch = dict(chs[0])
 
-        # آپدیت: اگه remaining > 0 کم کن، last_shown_at رو الان بذار
-        new_remaining = ch["remaining"]
-        if new_remaining > 0:
-            new_remaining -= 1
+        # اگه نامحدود → فقط last_shown_at آپدیت کن
+        if ch["remaining"] == -1:
+            c.execute("""
+                UPDATE ads_channels SET last_shown_at = ? WHERE id = ?
+            """, (int(datetime.now().timestamp()), ch["id"]))
+            return ch
 
-        c.execute("""
-            UPDATE ads_channels
-            SET remaining = ?, last_shown_at = ?
-            WHERE id = ?
-        """, (new_remaining, int(datetime.now().timestamp()), ch["id"]))
+        # اگه محدود → یک واحد کم کن
+        new_remaining = ch["remaining"] - 1
+
+        if new_remaining <= 0:
+            # پاک کردن کانال + نیاز به پیام تکمیل
+            c.execute("DELETE FROM ads_channels WHERE id = ?", (ch["id"],))
+            ch["_completed"] = True
+            ch["_remaining_after"] = 0
+        else:
+            c.execute("""
+                UPDATE ads_channels
+                SET remaining = ?, last_shown_at = ?
+                WHERE id = ?
+            """, (new_remaining, int(datetime.now().timestamp()), ch["id"]))
+            ch["_completed"] = False
 
         return ch
+
+
+async def notify_ads_complete(context, ch):
+    """ارسال پیام تکمیل سفارش Ads به ادمین"""
+    try:
+        from config import Config
+        await context.bot.send_message(
+            Config.ADMIN_ID,
+            f"✅ تکمیل سفارش کانال Ads :\n"
+            f"\n"
+            f"📢 نام کانال : {ch['display_name']}\n"
+            f"🔢 مقدار ثبت : {ch.get('_original_remaining', '?')}\n"
+            f"📆 تاریخ شروع : {_format_jalali_date(ch['created_at'])}"
+        )
+    except Exception as e:
+        print(f"notify_ads_complete error: {e}")
