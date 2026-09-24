@@ -5,23 +5,12 @@ from database import db
 from bot_manager import (
     get_user, update_user, set_user_state, get_user_state,
     add_coins, remove_coins, check_membership, check_bot_admin,
-    is_admin, check_referral_milestone
+    is_admin, check_referral_milestone, get_setting
 )
 from utils.keyboards import inline, back_button, main_menu
 from utils.helpers import (
     is_positive_int, is_valid_username, normalize_channel, now_ts, format_number
 )
-
-
-# ==================== آیتم‌های ثابت ثبت سفارش ====================
-ORDER_ITEMS = [
-    {"key": "item_20",   "members": 20,   "coins": 40},
-    {"key": "item_10",   "members": 10,   "coins": 20},
-    {"key": "item_100",  "members": 100,  "coins": 200},
-    {"key": "item_50",   "members": 50,   "coins": 100},
-    {"key": "item_400",  "members": 400,  "coins": 800},
-    {"key": "item_200",  "members": 200,  "coins": 400},
-]
 
 
 # ==================== تابع دریافت سکه عضویت (sync) ====================
@@ -32,26 +21,30 @@ def get_panel_join_coin(panel):
 # ==================== منوی سفارش ====================
 async def order_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    from bot_manager import get_setting
-    
+
     if get_setting("order_locked", "off") == "on":
         await update.message.reply_text("❌ ثبت سفارش موقتاً غیرفعال است.")
         return
-    
+
     text = "❓مقدار ممبر درخواستی خود را انتخاب کنید"
-    
+
+    with db.conn() as c:
+        items = c.execute("SELECT * FROM order_items ORDER BY position").fetchall()
+
+    if not items:
+        await update.message.reply_text("❌ هیچ آیتم سفارشی تنظیم نشده است.")
+        return
+
     rows = []
-    for i in range(0, len(ORDER_ITEMS), 2):
+    items = [dict(it) for it in items]
+    for i in range(0, len(items), 2):
         row = []
-        for item in ORDER_ITEMS[i:i+2]:
+        for item in items[i:i+2]:
             btn_text = f"👤 {item['members']} نفر = {item['coins']} الماس 💎"
             row.append((btn_text, f"order_pick:{item['key']}"))
         rows.append(row)
-    
-    await update.message.reply_text(
-        text,
-        reply_markup=inline(rows)
-    )
+
+    await update.message.reply_text(text, reply_markup=inline(rows))
 
 
 # ==================== انتخاب آیتم ====================
@@ -59,30 +52,28 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
     item_key = q.data.split(":", 1)[1]
-    
-    item = None
-    for it in ORDER_ITEMS:
-        if it["key"] == item_key:
-            item = it
-            break
-    
+
+    with db.conn() as c:
+        item = c.execute("SELECT * FROM order_items WHERE key = ?", (item_key,)).fetchone()
+
     if not item:
         await q.answer("❌ آیتم یافت نشد.", show_alert=True)
         return
-    
+    item = dict(item)
+
     user = get_user(user_id)
     if not user or user["coins"] < item["coins"]:
         await q.answer("❌ الماس شما کافی نیست", show_alert=True)
         return
-    
+
     await q.answer()
-    
+
     set_user_state(user_id, "order_channel", {
         "members": item["members"],
         "coins": item["coins"],
         "key": item_key,
     })
-    
+
     text = (
         "✅جهت دریافت ممبر باید ابتدا ربات را ادمین کانال مورد نظر کنید سپس آیدی کانال را ارسال نمایید\n"
         "\n"
@@ -91,7 +82,7 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📌درصورتی که مشکلی در ادمین کردن ربات دارید دستور زیر را ارسال نمایید\n"
         "/help"
     )
-    
+
     await q.message.reply_text(text, reply_markup=back_button())
 
 
@@ -107,12 +98,12 @@ def is_valid_at_channel(text: str) -> bool:
 def build_post_text(channel_title, channel_desc, channel):
     """ساخت متن پست تبلیغات — اگه توضیحات خالی بود، نمایش داده نمیشود"""
     text = f"‼️نام کانال : {channel_title}\n"
-    
+
     if channel_desc and channel_desc.strip() and channel_desc.strip() != "ندارد":
         text += f"\n📝توضیحات کانال: {channel_desc}\n"
-    
+
     text += f"\n🆔@{channel}"
-    
+
     return text
 
 
@@ -122,14 +113,14 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     state, data = get_user_state(user_id)
     if state != "order_channel":
         return False
-    
+
     text = (update.message.text or "").strip()
-    
+
     if text == "🔙 بازگشت":
         set_user_state(user_id, "none")
-        await update.message.reply_text("🏠", reply_markup=main_menu())
+        await update.message.reply_text("🏠", reply_markup=main_menu(is_admin(user_id)))
         return True
-    
+
     if not is_valid_at_channel(text):
         await update.message.reply_text(
             "❌آیدی ارسالی صحیح نمی باشد\n"
@@ -137,9 +128,20 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             "👈نمونه : @durov"
         )
         return True
-    
+
     channel = text[1:]
-    
+
+    # ==== چک کانال ممنوعه ====
+    with db.conn() as c:
+        banned = c.execute(
+            "SELECT 1 FROM banned_channels WHERE channel = ?", (channel,)
+        ).fetchone()
+    if banned:
+        await update.message.reply_text(
+            "❌ متاسفانه کانال شما از طرف ربات ممنوع شده است لطفا نام کانال دیگری را وارد فرمایید."
+        )
+        return True
+
     if not await check_bot_admin(context, channel):
         await update.message.reply_text(
             f"❌ربات ادمین کانال @{channel} نیست\n"
@@ -150,7 +152,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             f"/help"
         )
         return True
-    
+
     try:
         chat = await context.bot.get_chat(f"@{channel}")
         if chat.type not in ("channel", "supergroup"):
@@ -167,10 +169,10 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             "👈نمونه : @durov"
         )
         return True
-    
+
     members = data.get("members", 0)
     coins = data.get("coins", 0)
-    
+
     set_user_state(user_id, "order_confirm", {
         "members": members,
         "coins": coins,
@@ -179,15 +181,15 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         "channel_desc": chat.description or "",
         "channel_id": chat.id,
     })
-    
+
     post_text = build_post_text(chat.title, chat.description or "", channel)
-    
+
     sent = await update.message.reply_text(post_text, reply_markup=back_button())
-    
+
     confirm_text = (
         f"👈آیا از درخواست {members} ممبر برای کانال فوق اطمینان دارید⁉️"
     )
-    
+
     await update.message.reply_text(
         confirm_text,
         reply_to_message_id=sent.message_id,
@@ -204,55 +206,83 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
     state, data = get_user_state(user_id)
-    
+
     if state != "order_confirm":
         await q.answer("❌ خطا. لطفاً دوباره تلاش کنید.", show_alert=True)
         return
-    
+
     members = data.get("members", 0)
     coins = data.get("coins", 0)
     channel = data.get("channel", "")
     channel_id = data.get("channel_id")
     channel_title = data.get("channel_title", "")
     channel_desc = data.get("channel_desc", "")
-    
+
+    # چک مجدد کانال ممنوعه (به خاطر race condition)
+    with db.conn() as c:
+        banned = c.execute(
+            "SELECT 1 FROM banned_channels WHERE channel = ?", (channel,)
+        ).fetchone()
+    if banned:
+        await q.answer(
+            "❌ متاسفانه کانال شما از طرف ربات ممنوع شده است لطفا نام کانال دیگری را وارد فرمایید.",
+            show_alert=True
+        )
+        set_user_state(user_id, "none")
+        return
+
     user = get_user(user_id)
     if not user or user["coins"] < coins:
         await q.answer("❌ الماس شما کافی نیست", show_alert=True)
         set_user_state(user_id, "none")
         return
-    
+
     await q.answer()
-    
+
     try:
         await q.message.delete()
     except Exception:
         pass
-    
-    # اول سفارش رو توی دیتابیس ثبت کن
+
+    # ۱. کسر اتمیک سکه
+    if not remove_coins(user_id, coins, "order_create", "ثبت سفارش"):
+        await context.bot.send_message(
+            user_id,
+            "❌ موجودی شما کافی نیست.",
+            reply_markup=main_menu(is_admin(user_id))
+        )
+        set_user_state(user_id, "none")
+        return
+
+    # ۲. ثبت سفارش
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (user_id, channel, channel_id, None, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
         order_id = cur.lastrowid
-    
-    # ساخت متن پست با دکمه‌های جدید
+
+    # ۳. ساخت متن پست با دکمه‌های جدید
     post_text = build_post_text(channel_title, channel_desc, channel)
-    
+
     bot_username = (await context.bot.get_me()).username
-    
-    # متن دکمه سفارش کانال (قابل تنظیم)
-    from bot_manager import get_setting
+
     order_btn_template = get_setting("order_btn_text", "👤 سفارش {members} ممبر")
     order_btn_text = order_btn_template.replace("{members}", str(members))
-    
+
+    # چک کانال Ads — اگه وجود داشت به جای دکمه سفارش نمایش بده
+    from handlers import admin_ads_channels
+    ads_ch = admin_ads_channels.get_next_ads_channel()
+    if ads_ch:
+        order_btn_text = f"ᵃᵈˢ {ads_ch['display_name']}"
+
     button = inline([
         [(order_btn_text, "noop")],
         [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
         [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
     ])
-    
+
+    # ۴. ارسال به کانال — اگه fail شد، سکه برگردون
     try:
         post = await context.bot.send_message(
             f"@{Config.ADS_CHANNEL}",
@@ -260,6 +290,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=button
         )
     except Exception as e:
+        add_coins(user_id, coins, "order_refund", f"بازگشت سفارش #{order_id}")
         with db.conn() as c:
             c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
         await context.bot.send_message(
@@ -269,17 +300,16 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         set_user_state(user_id, "none")
         return
-    
+
     with db.conn() as c:
         c.execute("UPDATE orders SET post_id = ? WHERE id = ?", (post.message_id, order_id))
-    
-    remove_coins(user_id, coins, "order_create", f"سفارش #{order_id}")
+
     update_user(user_id, orders_count=(get_user(user_id)["orders_count"] + 1))
-    
+
     set_user_state(user_id, "none")
-    
+
     post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post.message_id}"
-    
+
     success_text = (
         f"✅سفارش شما با موفقیت ثبت شد\n"
         f"\n"
@@ -287,7 +317,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f" \n"
         f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
     )
-    
+
     await context.bot.send_message(
         user_id,
         success_text,
@@ -320,7 +350,7 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
-    
+
     user = get_user(user_id)
     if not user:
         bot_username = (await context.bot.get_me()).username
@@ -329,14 +359,14 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             show_alert=True
         )
         return
-    
+
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         if not order:
             await q.answer("❌ سفارش یافت نشد.", show_alert=True)
             return
         order = dict(order)
-        
+
         dup = c.execute(
             "SELECT 1 FROM order_members WHERE order_id = ? AND user_id = ?",
             (order_id, user_id)
@@ -344,29 +374,29 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if dup:
             await q.answer("❌ قبلاً سکه این سفارش را گرفته‌اید.", show_alert=True)
             return
-    
+
     if order["admin_id"] == user_id:
         await q.answer("❌ نمی‌توانید از سفارش خودتان سکه بگیرید.", show_alert=True)
         return
-    
+
     if order["status"] != "running":
         await q.answer("❌ این سفارش فعال نیست.", show_alert=True)
         return
-    
+
     if order["member_received"] >= order["member_target"]:
         await q.answer("❌ ظرفیت این سفارش پر شده.", show_alert=True)
         return
-    
+
     if not await check_membership(context, order["channel"], user_id):
         await q.answer("❌ ابتدا در کانال عضو شوید.", show_alert=True)
         return
-    
+
     if not await check_membership(context, Config.ADS_CHANNEL, user_id):
         await q.answer("❌ ابتدا در کانال تبلیغات عضو شوید.", show_alert=True)
         return
-    
+
     coin = get_panel_join_coin(user["panel"])
-    
+
     success = False
     with db.conn() as c:
         dup = c.execute(
@@ -376,40 +406,40 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if dup:
             await q.answer("❌ قبلاً ثبت شده.", show_alert=True)
             return
-        
+
         cur = c.execute("""
             UPDATE orders SET member_received = member_received + 1
             WHERE id = ? AND member_received < member_target
         """, (order_id,))
-        
+
         if cur.rowcount > 0:
             c.execute("""
                 INSERT INTO order_members (order_id, user_id)
                 VALUES (?, ?)
             """, (order_id, user_id))
-            
+
             c.execute("UPDATE users SET ads_joined = ads_joined + 1 WHERE user_id = ?", (user_id,))
             success = True
-    
+
     if not success:
         await q.answer("❌ ثبت نشد. دوباره تلاش کنید.", show_alert=True)
         return
-    
+
     try:
         await check_referral_milestone(context, user_id)
     except Exception:
         pass
-    
+
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
-    
+
     new_user = get_user(user_id)
     new_coins = new_user["coins"] if new_user else 0
-    
+
     await q.answer(
         f"💰 سکه دریافتی : {coin} سکه | موجودی کل : {new_coins:,} سکه",
         show_alert=False
     )
-    
+
     with db.conn() as c:
         o = c.execute(
             "SELECT member_received, member_target, post_id, admin_id, channel FROM orders WHERE id=?",
@@ -435,7 +465,7 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
-    
+
     user = get_user(user_id)
     if not user:
         bot_username = (await context.bot.get_me()).username
@@ -444,32 +474,32 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
             show_alert=True
         )
         return
-    
+
     with db.conn() as c:
         if c.execute("SELECT 1 FROM order_reports WHERE order_id=? AND reporter_id=?", (order_id, user_id)).fetchone():
             await q.answer("❌ قبلاً گزارش داده‌اید.", show_alert=True)
             return
-        
+
         o = c.execute(
             "SELECT id, admin_id, channel, post_id FROM orders WHERE id=?",
             (order_id,)
         ).fetchone()
-        
+
         if not o:
             await q.answer("❌ سفارش یافت نشد.", show_alert=True)
             return
-        
+
         c.execute(
             "INSERT INTO order_reports (order_id, reporter_id) VALUES (?, ?)",
             (order_id, user_id)
         )
-    
+
     await q.answer("✅ گزارش شما ثبت شد.", show_alert=True)
-    
+
     order_admin = o["admin_id"]
     channel = o["channel"]
     post_id = o["post_id"]
-    
+
     text = (
         f"🚫 گزارش جدید\n"
         f"سفارش #{post_id}\n"
@@ -477,16 +507,16 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"سفارش‌دهنده: <code>{order_admin}</code>\n"
         f"کانال: @{channel}"
     )
-    
+
     post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post_id}"
-    
+
     keyboard = inline([
         [("👁 مشاهده پست", post_link)],
         [("👤 پروفایل گزارش‌دهنده", f"show_profile:{user_id}"),
          ("👤 پروفایل سفارش‌دهنده", f"show_profile:{order_admin}")],
         [("🗑 حذف گزارش", f"report_delete:{order_id}")],
     ])
-    
+
     try:
         await context.bot.send_message(
             Config.ADMIN_ID,
@@ -502,45 +532,42 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_user_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     admin_id = q.from_user.id
-    
+
     if not is_admin(admin_id):
         await q.answer("❌ دسترسی ندارید.", show_alert=True)
         return
-    
+
     await q.answer()
-    
+
     target_id = int(q.data.split(":")[1])
-    
+
     user = get_user(target_id)
     if not user:
         await q.message.reply_text("❌ کاربر در دیتابیس یافت نشد.")
         return
-    
+
     from utils.texts import account_text
     text = account_text(user)
-    
-    await q.message.reply_text(
-        text,
-        parse_mode="HTML"
-    )
+
+    await q.message.reply_text(text, parse_mode="HTML")
 
 
 # ==================== حذف گزارش ====================
 async def report_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
-    
+
     if user_id != Config.ADMIN_ID:
         await q.answer("❌ فقط ادمین اصلی می‌تواند حذف کند.", show_alert=True)
         return
-    
+
     order_id = int(q.data.split(":")[1])
-    
+
     with db.conn() as c:
         c.execute("DELETE FROM order_reports WHERE order_id = ?", (order_id,))
-    
+
     await q.answer("✅ گزارش حذف شد.", show_alert=True)
-    
+
     try:
         await q.message.delete()
     except Exception:
@@ -551,7 +578,7 @@ async def report_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
-    
+
     if not (
         data.startswith("order_pick:") or
         data.startswith("order_confirm_yes:") or
@@ -562,7 +589,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         data.startswith("show_profile:")
     ):
         return False
-    
+
     if data.startswith("order_pick:"):
         await order_pick(update, context)
         return True
