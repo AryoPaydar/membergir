@@ -13,7 +13,6 @@ from utils.helpers import (
 )
 
 
-# ==================== تابع دریافت سکه عضویت (sync) ====================
 def get_panel_join_coin(panel):
     return Config.PANELS.get(panel, "عادی")["join_coin"]
 
@@ -86,7 +85,7 @@ async def order_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.message.reply_text(text, reply_markup=back_button())
 
 
-# ==================== چک معتبر بودن آیدی (فقط با @) ====================
+# ==================== چک معتبر بودن آیدی ====================
 def is_valid_at_channel(text: str) -> bool:
     if not text or not text.startswith("@"):
         return False
@@ -94,7 +93,6 @@ def is_valid_at_channel(text: str) -> bool:
     return bool(re.match(r"^@[a-zA-Z0-9_]{5,32}$", text.strip()))
 
 
-# ==================== ساخت متن پست تبلیغات ====================
 def build_post_text(channel_title, channel_desc, channel):
     text = f"‼️نام کانال : {channel_title}\n"
     if channel_desc and channel_desc.strip() and channel_desc.strip() != "ندارد":
@@ -271,8 +269,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ads_channel = ads_ch['channel']
         if ads_channel.startswith("@"):
             ads_url = f"https://t.me/{ads_channel.lstrip('@')}"
-        elif ads_channel.startswith("+"):
-            ads_url = f"https://t.me/{ads_channel}"
         else:
             ads_url = f"https://t.me/{ads_channel}"
 
@@ -281,6 +277,10 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [("🌐 عضویت در کانال", f"https://t.me/{channel}"), ("💎 دریافت الماس", f"claim_coin:{order_id}")],
             [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
         ])
+
+        # اگه کانال Ads تکمیل شد → پیام به ادمین
+        if ads_ch.get("_completed"):
+            await admin_ads_channels.notify_ads_complete(context, ads_ch)
     else:
         order_btn_template = get_setting("order_btn_text", "👤 سفارش {members} ممبر")
         order_btn_text = order_btn_template.replace("{members}", str(members))
