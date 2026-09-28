@@ -178,7 +178,10 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     post_text = build_post_text(chat.title, chat.description or "", channel)
 
-    sent = await update.message.reply_text(post_text, reply_markup=back_button())
+    sent = await update.message.reply_text(
+        post_text,
+        reply_markup=main_menu(is_admin(user_id))
+    )
 
     confirm_text = (
         f"👈آیا از درخواست {members} ممبر برای کانال فوق اطمینان دارید⁉️"
@@ -191,11 +194,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             [("✅ بله", f"order_confirm_yes:{sent.message_id}"),
              ("❌ خیر", "order_confirm_no")],
         ])
-    )
-
-    await update.message.reply_text(
-        "🏠",
-        reply_markup=main_menu(is_admin(user_id))
     )
     return True
 
