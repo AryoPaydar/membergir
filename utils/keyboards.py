@@ -3,7 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMa
 # ==================== کیبورد اصلی کاربر ====================
 def main_menu(is_admin=False):
     rows = [
-        ["💰 دریافت سکه", "👤 حساب کاربری"],
+		["👤 حساب کاربری","💰 دریافت سکه"],
         ["🚀 ثبت سفارش", "👥 زیرمجموعه‌گیری"],
         ["🎁 کد هدیه", "🛍 فروشگاه"],
         ["🚀 ارتقا پنل", "🏆 برترین‌ها"],
