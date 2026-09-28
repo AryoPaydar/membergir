@@ -134,11 +134,18 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("لطفاً /start را بزنید.")
         return
 
-    text = account_text(user)
+    uid = user.get("user_id")
+    bot_username = (await context.bot.get_me()).username
+
+    import urllib.parse
+    text = f"اشتراک آیدی من در ربات @{bot_username} :\n🫆 شماره کاربری من: {uid}"
+    share_url = f"https://t.me/share/url?url={uid}&text={urllib.parse.quote(text)}"
+
     await update.message.reply_text(
-        text, parse_mode="HTML",
+        account_text(user),
+        parse_mode="HTML",
         reply_markup=inline([
-            [("🔗 اشتراک آیدی من", "share_id")],
+            [("🔗 اشتراک آیدی من", share_url)],
         ])
     )
 
@@ -697,9 +704,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     q = update.callback_query
     data = q.data
     
-    if data == "share_id":
-        await share_id(update, context)
-        return True
     if data == "check_join":
         await check_join_callback(update, context)
         return True
