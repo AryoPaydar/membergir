@@ -134,22 +134,9 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("لطفاً /start را بزنید.")
         return
 
-    uid = user.get("user_id")
-    bot_username = (await context.bot.get_me()).username
-
     import urllib.parse
-    text = (
-        f"اشتراک آیدی من در ربات "
-        f"<b><a href='https://t.me/{bot_username}'>@{bot_username}</a></b> :\n"
-        f"🫆 شماره کاربری من: <code>{uid}</code>"
-    )
-    share_url = (
-        f"https://t.me/share/url?url={uid}&text="
-        + urllib.parse.quote(
-            f"اشتراک آیدی من در ربات @{bot_username} :\n"
-            f"🫆 شماره کاربری من: {uid}"
-        )
-    )
+    text = f"اشتراک آیدی من در ربات @{bot_username} :\n🫆 شماره کاربری من: {uid}"
+    share_url = f"https://t.me/share/url?url={uid}&text={urllib.parse.quote(text)}"
 
     await update.message.reply_text(
         account_text(user),
