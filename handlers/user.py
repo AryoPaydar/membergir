@@ -181,6 +181,7 @@ async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = inline([
         [("💎 الماس روزانه", "daily_gift_claim") , ("📢 عضویت در کانال", f"https://t.me/{ads_channel}")],
         [("🛍 خرید الماس", "go_to_shop")],
+        ]) 
     
     await update.message.reply_text(
         text,
