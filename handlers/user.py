@@ -139,8 +139,8 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     import urllib.parse
     share_text = (
-        f"اشتراک آیدی من در ربات @{bot_username} :\n"
-        f"🫆 شماره کاربری من: {uid}"
+        f"🫆 شماره کاربری من: {uid}\n"
+        f"آیدی من در ربات @{bot_username} :"
     )
     share_url = "https://t.me/share/url?url=" + urllib.parse.quote(share_text)
 
