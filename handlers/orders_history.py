@@ -1,5 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from config import Config
 from database import db
 from bot_manager import get_user, is_admin, get_setting
 from utils.keyboards import inline, main_menu
@@ -23,7 +24,7 @@ async def tracking_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     WHERE om.order_id = o.id AND om.left_at IS NOT NULL) as left_members
             FROM orders o
             WHERE o.admin_id = ? AND o.status = 'running'
-            ORDER BY o.post_id DESC
+            ORDER BY o.post_id ASC
         """, (user_id,)).fetchall()
 
     if not orders:
@@ -50,7 +51,7 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
     for o in chunk:
         post_id = o.get("post_id") or o["id"]
         channel = o["channel"]
-        post_link = f"https://t.me/{channel}/{post_id}"
+        post_link = f"https://t.me/{Config.ADS_CHANNEL}/{post_id}"
 
         try:
             dt = datetime.strptime(str(o["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
@@ -97,48 +98,6 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
 
     rows.append([("🔙 بازگشت به منوی اصلی", "tracking_back")])
 
-    if is_first:
-        await update.message.reply_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=inline(rows)
-        )
-    else:
-        q = update.callback_query
-        try:
-            await q.message.edit_text(
-                text,
-                parse_mode="HTML",
-                reply_markup=inline(rows)
-            )
-        except Exception:
-            pass
-
-    # دکمه‌ها: لغو سفارش‌ها دوتا دوتا + ناوبری صفحه‌بندی
-    rows = []
-    cancel_buttons = []
-    for o in chunk:
-        post_id = o.get("post_id") or o["id"]
-        if o["status"] == "running":
-            cancel_buttons.append((f"❌ لغو #{post_id}", f"cancel_confirm:{o['id']}"))
-
-    # دو تا دو تا کنار هم
-    for i in range(0, len(cancel_buttons), 2):
-        rows.append(list(cancel_buttons[i:i+2]))
-
-    # دکمه‌های صفحه‌بندی
-    if total_pages > 1:
-        nav = []
-        if page > 0:
-            nav.append(("⬅️ قبلی", f"tracking_page:{page-1}"))
-        nav.append((f"{page+1}/{total_pages}", "noop"))
-        if page < total_pages - 1:
-            nav.append(("بعدی ➡️", f"tracking_page:{page+1}"))
-        rows.append(nav)
-
-    rows.append([("🔙 بازگشت به منوی اصلی", "tracking_back")])
-
-    # اگه برای اولین باره پیام بفرست، وگرنه edit کن
     if is_first:
         await update.message.reply_text(
             text,
@@ -234,7 +193,6 @@ async def cancel_order_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (user_id, refund, f"بازگشت از سفارش #{order.get('post_id') or order_id}"))
 
     try:
-        from config import Config
         await context.bot.delete_message(f"@{Config.ADS_CHANNEL}", order["post_id"])
     except Exception:
         pass
@@ -299,7 +257,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         WHERE om.order_id = o.id AND om.left_at IS NOT NULL) as left_members
                 FROM orders o
                 WHERE o.admin_id = ? AND o.status = 'running'
-                ORDER BY o.post_id DESC
+                ORDER BY o.post_id ASC
             """, (user_id,)).fetchall()
 
         orders = [dict(o) for o in orders]
