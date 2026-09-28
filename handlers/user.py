@@ -133,12 +133,11 @@ async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         await update.message.reply_text("لطفاً /start را بزنید.")
         return
-    
+
     text = account_text(user)
     await update.message.reply_text(
         text, parse_mode="HTML",
         reply_markup=inline([
-            [("🎊 دریافت هدیه ساعتی", "hourly_gift_claim")],
             [("🔗 اشتراک آیدی من", "share_id")],
         ])
     )
@@ -285,10 +284,29 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def share_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    user_id = q.from_user.id
-    await q.message.reply_text(
-        f"🆔 آیدی عددی شما:\n<code>{user_id}</code>",
-        parse_mode="HTML"
+
+    user = get_user(q.from_user.id)
+    if not user:
+        return
+
+    name = user.get("first_name") or "کاربر"
+    username = f"@{user['username']}" if user.get("username") else "ندارد"
+    uid = user.get("user_id")
+
+    share_text = (
+        f"🔰 نام کاربری : {name}\n"
+        f"🆔 یوزرنیم : {username}\n"
+        f"🫆 شماره کاربری : <code>{uid}</code>"
+    )
+
+    # ارسال پیامی که قابلیت فوروارد داشته باشه
+    msg = await q.message.reply_text(
+        share_text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("📤 فوروارد به دوستان",
+              f"https://t.me/share/url?url={uid}&text=🫆 شماره کاربری من: {uid}")]
+        ])
     )
 
 
