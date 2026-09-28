@@ -321,7 +321,7 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     success_text = (
         f"✅سفارش شما با موفقیت ثبت شد\n"
         f"\n"
-        f"🔍 کد پیگیری سفارش شما {order_id} می باشد\n"
+        f"🔍 کد پیگیری سفارش شما <code>{post.message_id}</code> می باشد\n"
         f" \n"
         f"👥سفارش شما در قسمت پیگیری سفارشات قابل پیگیری است."
     )
