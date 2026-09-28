@@ -179,8 +179,7 @@ async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ads_channel = Config.ADS_CHANNEL or ""
     
     keyboard = inline([
-        [("📢 عضویت در کانال", f"https://t.me/{ads_channel}")],
-        [("💎 الماس روزانه", "daily_gift_claim")],
+        [("📢 عضویت در کانال", f"https://t.me/{ads_channel}") , ("💎 الماس روزانه", "daily_gift_claim")],
         [("🛍 خرید الماس", "go_to_shop")],
     ])
     
