@@ -65,7 +65,7 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
         }.get(o["status"], "❓")
 
         text += (
-            f"💮 سفارش شماره <a href='{post_link}'>#{post_id}</a>\n"
+            f"<a href='{post_link}'>💮 سفارش شماره #{post_id}</a>\n"
             f"\n"
             f"📢 کانال: @{channel}\n"
             f"👥 ممبر درخواستی: {o['member_target']:,}\n"
@@ -75,6 +75,44 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
             f"📊 وضعیت: {status_text}\n"
             f"————————————\n"
         )
+
+    rows = []
+    cancel_buttons = []
+    for o in chunk:
+        post_id = o.get("post_id") or o["id"]
+        if o["status"] == "running":
+            cancel_buttons.append((f"❌ لغو #{post_id}", f"cancel_confirm:{o['id']}"))
+
+    for i in range(0, len(cancel_buttons), 2):
+        rows.append(list(cancel_buttons[i:i+2]))
+
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(("⬅️ قبلی", f"tracking_page:{page-1}"))
+        nav.append((f"{page+1}/{total_pages}", "noop"))
+        if page < total_pages - 1:
+            nav.append(("بعدی ➡️", f"tracking_page:{page+1}"))
+        rows.append(nav)
+
+    rows.append([("🔙 بازگشت به منوی اصلی", "tracking_back")])
+
+    if is_first:
+        await update.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=inline(rows)
+        )
+    else:
+        q = update.callback_query
+        try:
+            await q.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=inline(rows)
+            )
+        except Exception:
+            pass
 
     # دکمه‌ها: لغو سفارش‌ها دوتا دوتا + ناوبری صفحه‌بندی
     rows = []
