@@ -292,21 +292,14 @@ async def share_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = user.get("user_id")
     bot_username = (await context.bot.get_me()).username
 
-    share_text = (
-        f"اشتراک آیدی من در ربات <b><a href='https://t.me/{bot_username}'>@{bot_username}</a></b> :\n"
-        f"🫆 شماره کاربری من: {uid}"
-    )
+    import urllib.parse
+    text = f"اشتراک آیدی من در ربات @{bot_username} :\n🫆 شماره کاربری من: {uid}"
+    share_url = f"https://t.me/share/url?url={uid}&text={urllib.parse.quote(text)}"
 
-    share_url = (
-        f"https://t.me/share/url?url={uid}"
-        f"&text=" + __import__("urllib.parse", fromlist=["quote"]).quote(
-            f"اشتراک آیدی من در ربات @{bot_username} :\n🫆 شماره کاربری من: {uid}"
-        )
-    )
-
-    await q.message.reply_text(
-        share_text,
-        parse_mode="HTML",
+    await q.message.delete()
+    await context.bot.send_message(
+        q.from_user.id,
+        "👇 برای اشتراک آیدی خود روی دکمه زیر بزنید:",
         reply_markup=inline([
             [("📤 اشتراک آیدی من", share_url)]
         ])
