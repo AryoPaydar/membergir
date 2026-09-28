@@ -6,51 +6,68 @@ from utils.keyboards import inline, main_menu
 from utils.helpers import format_number, now_ts
 from datetime import datetime
 import jdatetime
+import math
 
 
-# ==================== منوی پیگیری (مستقیم لیست) ====================
+# ==================== منوی پیگیری ====================
 async def tracking_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش مستقیم لیست سفارشات اخیر کاربر"""
+    """نمایش لیست سفارشات فعال کاربر با صفحه‌بندی"""
     user_id = update.effective_user.id
-    
+
     with db.conn() as c:
         orders = c.execute("""
-            SELECT o.*, 
-                   (SELECT COUNT(*) FROM order_members om WHERE om.order_id = o.id AND om.left_at IS NULL) as active_members,
-                   (SELECT COUNT(*) FROM order_members om WHERE om.order_id = o.id AND om.left_at IS NOT NULL) as left_members
+            SELECT o.*,
+                   (SELECT COUNT(*) FROM order_members om
+                    WHERE om.order_id = o.id AND om.left_at IS NULL) as active_members,
+                   (SELECT COUNT(*) FROM order_members om
+                    WHERE om.order_id = o.id AND om.left_at IS NOT NULL) as left_members
             FROM orders o
-            WHERE o.admin_id = ?
-            ORDER BY o.id DESC
-            LIMIT 10
+            WHERE o.admin_id = ? AND o.status = 'running'
+            ORDER BY o.post_id DESC
         """, (user_id,)).fetchall()
-    
+
     if not orders:
         await update.message.reply_text(
-            "📭 هنوز سفارشی ثبت نکرده‌اید.",
+            "📭 هنوز سفارش فعالی ثبت نکرده‌اید.",
             reply_markup=main_menu(is_admin(user_id))
         )
         return
-    
-    text = "📋 <b>سفارشات اخیر شما:</b>\n\n"
-    rows = []
-    
-    for o in orders:
-        status_text = {
-            "running": "در حال اجرا ♻️",
-            "completed": "تکمیل شده ✅",
-            "cancelled": "لغو شده ❌",
-        }.get(o["status"], "❓")
-        
+
+    orders = [dict(o) for o in orders]
+    await _show_orders_page(update, context, orders, 0, is_first=True)
+
+
+async def _show_orders_page(update, context, orders, page, is_first=False):
+    """نمایش یک صفحه از سفارشات"""
+    per_page = 5
+    total = len(orders)
+    total_pages = math.ceil(total / per_page)
+    start = page * per_page
+    chunk = orders[start:start + per_page]
+
+    text = "📋 سفارشات اخیر شما:\n\n"
+
+    for o in chunk:
+        post_id = o.get("post_id") or o["id"]
+        channel = o["channel"]
+        post_link = f"https://t.me/{channel}/{post_id}"
+
         try:
             dt = datetime.strptime(str(o["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
             date_jalali = jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d %H:%M")
         except Exception:
             date_jalali = str(o["created_at"])[:16]
-        
+
+        status_text = {
+            "running": "در حال اجرا ♻️",
+            "completed": "تکمیل شده ✅",
+            "cancelled": "لغو شده ❌",
+        }.get(o["status"], "❓")
+
         text += (
-            f"📋 <b>سفارش شماره #{o['id']}</b>\n"
+            f"💮 سفارش شماره <a href='{post_link}'>#{post_id}</a>\n"
             f"\n"
-            f"📢 کانال: @{o['channel']}\n"
+            f"📢 کانال: @{channel}\n"
             f"👥 ممبر درخواستی: {o['member_target']:,}\n"
             f"🟢 ممبر دریافتی: {o['member_received']:,}\n"
             f"🔴 اعضای ترک‌کرده: {o['left_members']:,}\n"
@@ -58,19 +75,48 @@ async def tracking_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📊 وضعیت: {status_text}\n"
             f"————————————\n"
         )
-        
+
+    # دکمه‌ها: لغو سفارش‌ها دوتا دوتا + ناوبری صفحه‌بندی
+    rows = []
+    cancel_buttons = []
+    for o in chunk:
+        post_id = o.get("post_id") or o["id"]
         if o["status"] == "running":
-            rows.append([
-                (f"❌ لغو سفارش {o['id']}", f"cancel_confirm:{o['id']}")
-            ])
-    
+            cancel_buttons.append((f"❌ لغو #{post_id}", f"cancel_confirm:{o['id']}"))
+
+    # دو تا دو تا کنار هم
+    for i in range(0, len(cancel_buttons), 2):
+        rows.append(list(cancel_buttons[i:i+2]))
+
+    # دکمه‌های صفحه‌بندی
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(("⬅️ قبلی", f"tracking_page:{page-1}"))
+        nav.append((f"{page+1}/{total_pages}", "noop"))
+        if page < total_pages - 1:
+            nav.append(("بعدی ➡️", f"tracking_page:{page+1}"))
+        rows.append(nav)
+
     rows.append([("🔙 بازگشت به منوی اصلی", "tracking_back")])
-    
-    await update.message.reply_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=inline(rows)
-    )
+
+    # اگه برای اولین باره پیام بفرست، وگرنه edit کن
+    if is_first:
+        await update.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=inline(rows)
+        )
+    else:
+        q = update.callback_query
+        try:
+            await q.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=inline(rows)
+            )
+        except Exception:
+            pass
 
 
 # ==================== لغو سفارش ====================
@@ -79,23 +125,22 @@ async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
     await q.answer()
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
-    
+
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id=? AND admin_id=?", (order_id, user_id)).fetchone()
     if not order:
         await q.message.reply_text("❌ سفارش یافت نشد.")
         return
-    
+
     order = dict(order)
     if order["status"] != "running":
         await q.message.reply_text("❌ این سفارش فعال نیست.")
         return
-    
+
     if get_setting("cancel_enabled", "on") != "on":
         await q.message.reply_text("❌ لغو سفارش غیرفعال است.")
         return
-    
-    # 👇 این بلاک تغییر کرد: پیام معمولی + دکمه تلاش مجدد
+
     cancel_at = order.get("cancel_at") or 0
     if now_ts() < cancel_at:
         remaining = cancel_at - now_ts()
@@ -107,14 +152,13 @@ async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
             ])
         )
         return
-    # 👆 پایان تغییر
-    
+
     ratio = float(get_setting("cancel_refund_ratio", "0.5"))
     remaining = order["member_target"] - order["member_received"]
     refund = int(remaining * ratio)
-    
+
     await q.message.reply_text(
-        f"⁉️ آیا از لغو سفارش <b>#{order_id}</b> مطمئن هستید؟\n\n"
+        f"⁉️ آیا از لغو سفارش <b>#{order.get('post_id') or order_id}</b> مطمئن هستید؟\n\n"
         f"👥 ممبر باقی‌مانده: {remaining}\n"
         f"💰 سکه بازگشتی: {refund:,}",
         parse_mode="HTML",
@@ -129,7 +173,7 @@ async def cancel_order_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
-    
+
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id=? AND admin_id=?", (order_id, user_id)).fetchone()
         if not order:
@@ -139,34 +183,33 @@ async def cancel_order_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if order["status"] != "running":
             await q.answer("❌ قبلاً بسته شده.", show_alert=True)
             return
-        
+
         ratio = float(get_setting("cancel_refund_ratio", "0.5"))
         remaining = order["member_target"] - order["member_received"]
         refund = int(remaining * ratio)
-        
+
         c.execute("UPDATE orders SET status='cancelled' WHERE id=?", (order_id,))
         c.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (refund, user_id))
         c.execute("""
             INSERT INTO transactions (to_id, amount, type, description)
             VALUES (?, ?, 'order_cancel_refund', ?)
-        """, (user_id, refund, f"بازگشت از سفارش #{order_id}"))
-    
+        """, (user_id, refund, f"بازگشت از سفارش #{order.get('post_id') or order_id}"))
+
     try:
         from config import Config
         await context.bot.delete_message(f"@{Config.ADS_CHANNEL}", order["post_id"])
     except Exception:
         pass
-    
+
     await q.answer(f"✅ سفارش لغو شد. {refund:,} سکه بازگشت.", show_alert=True)
     try:
         await q.message.delete()
     except Exception:
         pass
-    
-    from utils.keyboards import main_menu
+
     await context.bot.send_message(
         user_id,
-        f"✅ سفارش #{order_id} با موفقیت لغو شد.\n"
+        f"✅ سفارش #{order.get('post_id') or order_id} با موفقیت لغو شد.\n"
         f"💰 {refund:,} سکه به حساب شما بازگشت.",
         reply_markup=main_menu(is_admin(user_id))
     )
@@ -191,7 +234,7 @@ async def tracking_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
-    
+
     if data.startswith("cancel_confirm:"):
         await cancel_order_confirm(update, context)
         return True
@@ -201,11 +244,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "tracking_back":
         await tracking_back(update, context)
         return True
-    
+    if data == "noop":
+        await q.answer()
+        return True
+    if data.startswith("tracking_page:"):
+        await q.answer()
+        page = int(data.split(":")[1])
+        user_id = q.from_user.id
+
+        with db.conn() as c:
+            orders = c.execute("""
+                SELECT o.*,
+                       (SELECT COUNT(*) FROM order_members om
+                        WHERE om.order_id = o.id AND om.left_at IS NULL) as active_members,
+                       (SELECT COUNT(*) FROM order_members om
+                        WHERE om.order_id = o.id AND om.left_at IS NOT NULL) as left_members
+                FROM orders o
+                WHERE o.admin_id = ? AND o.status = 'running'
+                ORDER BY o.post_id DESC
+            """, (user_id,)).fetchall()
+
+        orders = [dict(o) for o in orders]
+        await _show_orders_page(update, context, orders, page, is_first=False)
+        return True
+
     return False
 
 
 # ==================== State Handler ====================
 async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """این ماژول state ندارد — همه کارها با callback انجام می‌شود."""
     return False
