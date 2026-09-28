@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, LinkPreviewOptions
 from telegram.ext import ContextTypes
 from config import Config
 from database import db
@@ -98,11 +98,14 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
 
     rows.append([("🔙 بازگشت به منوی اصلی", "tracking_back")])
 
+    link_opts = LinkPreviewOptions(is_disabled=True)
+
     if is_first:
         await update.message.reply_text(
             text,
             parse_mode="HTML",
-            reply_markup=inline(rows)
+            reply_markup=inline(rows),
+            link_preview_options=link_opts
         )
     else:
         q = update.callback_query
@@ -110,7 +113,8 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
             await q.message.edit_text(
                 text,
                 parse_mode="HTML",
-                reply_markup=inline(rows)
+                reply_markup=inline(rows),
+                link_preview_options=link_opts
             )
         except Exception:
             pass
