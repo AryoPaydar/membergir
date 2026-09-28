@@ -192,6 +192,11 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
              ("❌ خیر", "order_confirm_no")],
         ])
     )
+
+    await update.message.reply_text(
+        "🏠",
+        reply_markup=main_menu(is_admin(user_id))
+    )
     return True
 
 
