@@ -176,13 +176,20 @@ def set_setting(key: str, value: str):
         """, (key, str(value)))
 
 # ==================== بررسی عضویت ====================
-async def check_membership(context, channel: str, user_id: int) -> bool:
-    if not channel:
+async def check_membership(context, channel: str, user_id: int, chat_id: int = None) -> bool:
+    if not channel and not chat_id:
         return True
     try:
-        target = int(channel)
+        target = chat_id if chat_id else (
+            int(channel) if str(channel).lstrip("-").isdigit()
+            else f"@{channel.lstrip('@')}"
+        )
     except (ValueError, TypeError):
-        target = f"@{channel.lstrip('@')}"
+        target = f"@{channel.lstrip('@')}" if channel else None
+
+    if not target:
+        return True
+
     try:
         member = await context.bot.get_chat_member(target, user_id)
         return member.status in ("member", "administrator", "creator")
