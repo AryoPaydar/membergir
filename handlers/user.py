@@ -72,29 +72,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def check_force_join(context, user_id):
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-    
+
     missing = []
-    
+
     for ch in (Config.FORCE_CHANNEL_1, Config.FORCE_CHANNEL_2):
         if ch and not await check_membership(context, ch, user_id):
             missing.append(ch)
-    
+
     with db.conn() as c:
-        ads_list = c.execute("SELECT channel FROM ads_channels_tg").fetchall()
+        ads_list = c.execute("SELECT channel, chat_id FROM ads_channels_tg").fetchall()
     for row in ads_list:
         ch = row["channel"]
-        if ch and not await check_membership(context, ch, user_id):
+        cid = row["chat_id"]
+        if ch and not await check_membership(context, ch, user_id, cid):
             missing.append(ch)
-    
+
     if not missing:
         return True
-    
+
     text = "🔐 برای استفاده از ربات ابتدا در کانال‌های زیر عضو شوید:\n\n"
     buttons = []
     for ch in missing:
-        buttons.append([InlineKeyboardButton("📢 عضویت در کانال", url=f"https://t.me/{ch.lstrip('@')}")])
+        if ch.startswith("+") or ch.startswith("joinchat"):
+            url = f"https://t.me/{ch}"
+        else:
+            url = f"https://t.me/{ch.lstrip('@')}"
+        buttons.append([InlineKeyboardButton("📢 عضویت در کانال", url=url)])
     buttons.append([InlineKeyboardButton("✅ عضو شدم", callback_data="check_join")])
-    
+
     await context.bot.send_message(
         user_id, text,
         reply_markup=InlineKeyboardMarkup(buttons)
