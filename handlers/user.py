@@ -73,6 +73,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def check_force_join(context, user_id):
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    
     missing = []
     
     for ch in (Config.FORCE_CHANNEL_1, Config.FORCE_CHANNEL_2):
@@ -93,10 +95,9 @@ async def check_force_join(context, user_id):
     buttons = []
     for ch in missing:
         text += f"📢 @{ch}\n"
-        buttons.append([(f"عضویت در @{ch}", f"https://t.me/{ch}")])
-    buttons.append([("✅ عضو شدم", "check_join")])
+        buttons.append([InlineKeyboardButton(f"عضویت در @{ch}", url=f"https://t.me/{ch}")])
+    buttons.append([InlineKeyboardButton("✅ عضو شدم", callback_data="check_join")])
     
-    from telegram import InlineKeyboardMarkup
     await context.bot.send_message(
         user_id, text,
         reply_markup=InlineKeyboardMarkup(buttons)
