@@ -601,7 +601,6 @@ async def view_support_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = "ندارد"
         uid = m["user_id"]
     
-    # تاریخ شمسی
     try:
         dt = datetime.strptime(str(m["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
         date_jalali = jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d %H:%M")
@@ -701,6 +700,13 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     msg = update.message
     text = (msg.text or "").strip()
     
+    # 👈 چک دکمه بازگشت برای state های broadcast
+    if text in ("🔙 بازگشت", "🔙 بازگشت به پنل مدیریت"):
+        if state.startswith("bc_"):
+            set_user_state(user.id, "none")
+            await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
+            return True
+    
     if state == "admin_search_id":
         if text == "🔙 بازگشت":
             set_user_state(user.id, "none")
@@ -776,7 +782,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 return True
             m = dict(m)
             
-            # ذخیره پاسخ
             c.execute(
                 "UPDATE support_messages SET reply = ?, status = 'replied' WHERE id = ?",
                 (text, msg_id)
@@ -784,7 +789,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         
         set_user_state(user.id, "none")
         
-        # ارسال پاسخ به کاربر
         try:
             await context.bot.send_message(
                 m["user_id"],
