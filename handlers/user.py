@@ -80,8 +80,8 @@ async def check_force_join(context, user_id):
         if ch and not await check_membership(context, ch, user_id):
             missing.append(ch)
     
-    # کانال تبلیغات
-    ads_channel = get_setting("ads_channel", Config.ADS_CHANNEL)
+    # کانال تبلیغات (ads_channel از settings، اگه نبود از Config)
+    ads_channel = get_setting("ads_channel", None) or Config.ADS_CHANNEL
     if ads_channel and not await check_membership(context, ads_channel, user_id):
         missing.append(ads_channel)
     
