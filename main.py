@@ -108,7 +108,7 @@ async def on_message(update: Update, context):
         logger.info(f"✅ Created user {user_tg.id}")
 
     # 👈 چک جوین اجباری برای کاربران عادی
-    if not is_admin(user_tg.id):
+    if not is_admin(user_tg.id) and not text.startswith("/start"):
         from handlers.user import check_force_join
         if not await check_force_join(context, user_tg.id):
             return
