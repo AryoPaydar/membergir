@@ -94,8 +94,7 @@ async def check_force_join(context, user_id):
     text = "🔐 برای استفاده از ربات ابتدا در کانال‌های زیر عضو شوید:\n\n"
     buttons = []
     for ch in missing:
-        text += f"📢 @{ch}\n"
-        buttons.append([InlineKeyboardButton(f"عضویت در @{ch}", url=f"https://t.me/{ch}")])
+        buttons.append([InlineKeyboardButton("📢 عضویت در کانال", url=f"https://t.me/{ch.lstrip('@')}")])
     buttons.append([InlineKeyboardButton("✅ عضو شدم", callback_data="check_join")])
     
     await context.bot.send_message(
