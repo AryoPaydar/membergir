@@ -74,31 +74,49 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     if not state or state == "none":
         return False
 
-    if text == "🔙 بازگشت":
+    if text in ("🔙 بازگشت", "🔙 بازگشت به پنل مدیریت"):
         set_user_state(user_id, "none")
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
 
     # ==== تنظیم کانال تبلیغات ====
     if state == "ach_set_ads":
-        channel = text.lstrip("@").strip()
+        channel = text.strip().lstrip("@")
+        for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+            if channel.startswith(prefix):
+                channel = channel[len(prefix):]
+                break
+        channel = channel.strip("/").split("/")[0].strip()
+
         if not is_valid_username(channel):
             await update.message.reply_text("❌ آیدی کانال نامعتبر است.")
             return True
         set_setting("ads_channel", channel)
         set_user_state(user_id, "none")
-        await update.message.reply_text(f"کانال تبلیغات به @{channel} تنظیم شد", reply_markup=admin_panel())
+        await update.message.reply_text(
+            f"✅ کانال تبلیغات به @{channel} تنظیم شد",
+            reply_markup=admin_panel()
+        )
         return True
 
     # ==== تنظیم کانال کد هدیه ====
     if state == "ach_set_gift":
-        channel = text.lstrip("@").strip()
+        channel = text.strip().lstrip("@")
+        for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+            if channel.startswith(prefix):
+                channel = channel[len(prefix):]
+                break
+        channel = channel.strip("/").split("/")[0].strip()
+
         if not is_valid_username(channel):
             await update.message.reply_text("❌ آیدی کانال نامعتبر است.")
             return True
         set_setting("gift_channel", channel)
         set_user_state(user_id, "none")
-        await update.message.reply_text(f"کانال کد هدیه به @{channel} تنظیم شد", reply_markup=admin_panel())
+        await update.message.reply_text(
+            f"✅ کانال کد هدیه به @{channel} تنظیم شد",
+            reply_markup=admin_panel()
+        )
         return True
 
     # ==== افزودن کانال اسپانسر ====
