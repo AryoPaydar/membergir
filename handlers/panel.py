@@ -174,7 +174,7 @@ async def confirm_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         user_id,
         f"🎉 تبریک! پنل شما به <b>{target_panel}</b> ارتقا یافت.\n\n"
-        f"⌛️ اعتبار: {validity_text}\n"
+        f"⌛️ اعتبار: {validity_text}\n",
         parse_mode="HTML",
         reply_markup=main_menu(is_admin(user_id))
     )
