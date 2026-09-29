@@ -79,7 +79,6 @@ async def check_force_join(context, user_id):
         if ch and not await check_membership(context, ch, user_id):
             missing.append(ch)
     
-    # چک همه کانال‌های تبلیغاتی
     with db.conn() as c:
         ads_list = c.execute("SELECT channel FROM ads_channels_tg").fetchall()
     for row in ads_list:
