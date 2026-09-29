@@ -107,6 +107,13 @@ async def on_message(update: Update, context):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
         logger.info(f"✅ Created user {user_tg.id}")
 
+    # 👈 چک جوین اجباری (کانال تبلیغات + کانال‌های force) — فقط برای کاربران عادی
+    if not is_admin(user_tg.id):
+        from handlers.user import check_force_join
+        if not await check_force_join(context, user_tg.id):
+            logger.info(f"🔐 User {user_tg.id} not joined force channels")
+            return
+
     # ۱. State کاربر
     for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
@@ -121,7 +128,6 @@ async def on_message(update: Update, context):
     if is_admin(user_tg.id):
         logger.info(f"👑 User {user_tg.id} is admin")
 
-        # دکمه بازگشت به پنل مدیریت (از زیرمنوهای ادمین)
         if text == "🔙 بازگشت به پنل مدیریت":
             set_user_state(user_tg.id, "none")
             await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
@@ -142,7 +148,6 @@ async def on_message(update: Update, context):
                 except Exception as e:
                     logger.exception(f"Admin state error in {module.__name__}: {e}")
 
-        # 🔮 state جستجوگر
         if await admin_user_info.handle_srch_state(update, context):
             logger.info("✅ admin_user_info.handle_srch_state handled")
             return
