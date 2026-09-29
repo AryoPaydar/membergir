@@ -88,12 +88,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             )
             return True
         with db.conn() as c:
-            try:
-                c.execute("INSERT INTO ads_channels_tg (channel) VALUES (?)", (channel,))
-            except Exception:
-                await update.message.reply_text("❌ این کانال قبلاً اضافه شده است.")
-                set_user_state(user_id, "none")
-                return True
+            c.execute("INSERT INTO ads_channels_tg (channel) VALUES (?)", (channel,))
         set_user_state(user_id, "none")
         await update.message.reply_text(
             "کانال / گروه ارسالی با موفقیت به کانال های تبلیغاتی اضافه شد",
