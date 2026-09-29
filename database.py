@@ -35,6 +35,7 @@ class Database:
                     panel           TEXT DEFAULT 'عادی',
                     panel_days      INTEGER DEFAULT 0,
                     panel_start     DATE,
+                    panel_expire    TEXT,
                     warnings        INTEGER DEFAULT 0,
                     banned          INTEGER DEFAULT 0,
                     referrer_id     INTEGER,
@@ -69,6 +70,7 @@ class Database:
                 "send_coin_admin": "INTEGER DEFAULT 0",
                 "last_hourly": "INTEGER DEFAULT 0",
                 "hourly_earned": "INTEGER DEFAULT 0",
+                "panel_expire": "TEXT",
             }
             for col, col_type in new_columns.items():
                 if col not in existing_columns:
@@ -294,7 +296,6 @@ class Database:
                 )
             """)
 
-            # اگه جدول قدیمی بدون original_remaining هست، اضافه کن
             ads_cols = [r[1] for r in c.execute("PRAGMA table_info(ads_channels)").fetchall()]
             if "original_remaining" not in ads_cols:
                 try:
