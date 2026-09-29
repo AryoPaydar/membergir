@@ -89,7 +89,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             return True
         with db.conn() as c:
             try:
-                c.execute("INSERT INTO sponsor_channels (channel) VALUES (?)", (channel,))
+                c.execute("INSERT INTO ads_channels_tg (channel) VALUES (?)", (channel,))
             except Exception:
                 await update.message.reply_text("❌ این کانال قبلاً اضافه شده است.")
                 set_user_state(user_id, "none")
@@ -179,7 +179,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "ach_ads_menu":
         await q.answer()
         with db.conn() as c:
-            chs = c.execute("SELECT * FROM sponsor_channels ORDER BY id DESC").fetchall()
+            chs = c.execute("SELECT * FROM ads_channels_tg ORDER BY id DESC").fetchall()
 
         if not chs:
             try:
@@ -223,7 +223,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await q.answer()
         ch_id = int(data.split(":")[1])
         with db.conn() as c:
-            ch = c.execute("SELECT * FROM sponsor_channels WHERE id = ?", (ch_id,)).fetchone()
+            ch = c.execute("SELECT * FROM ads_channels_tg WHERE id = ?", (ch_id,)).fetchone()
         if not ch:
             await q.message.edit_text("❌ کانال یافت نشد.", reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]]))
             return True
@@ -244,9 +244,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data.startswith("ach_ads_del:"):
         ch_id = int(data.split(":")[1])
         with db.conn() as c:
-            ch = c.execute("SELECT channel FROM sponsor_channels WHERE id = ?", (ch_id,)).fetchone()
+            ch = c.execute("SELECT channel FROM ads_channels_tg WHERE id = ?", (ch_id,)).fetchone()
             if ch:
-                c.execute("DELETE FROM sponsor_channels WHERE id = ?", (ch_id,))
+                c.execute("DELETE FROM ads_channels_tg WHERE id = ?", (ch_id,))
         if ch:
             await q.answer(f"کانال {ch['channel']} با موفقیت حذف شد", show_alert=True)
         else:
