@@ -2,13 +2,16 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from config import Config
 from database import db
-from bot_manager import get_user, update_user, set_user_state, get_user_state, is_admin, get_panel_config
+from bot_manager import get_user, update_user, set_user_state, get_user_state, is_admin, get_panel_config, check_panel_expiry
 from utils.keyboards import inline, main_menu, back_button
 from utils.helpers import format_number
 from datetime import datetime, timedelta
 
 
 async def panel_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # اول چک انقضا
+    check_panel_expiry(update.effective_user.id)
+
     user = get_user(update.effective_user.id)
     if not user:
         return
@@ -63,16 +66,12 @@ def _is_upgrade(current: str, target: str) -> bool:
 
 
 def _calc_panel_days_left(user):
-    """محاسبه روزهای باقی‌مانده پنل"""
-    panel_start = user.get("panel_start")
-    if not panel_start:
+    """محاسبه روزهای باقی‌مانده پنل از panel_expire"""
+    expire_str = user.get("panel_expire")
+    if not expire_str:
         return 0
     try:
-        if isinstance(panel_start, str):
-            start_dt = datetime.strptime(str(panel_start)[:19], "%Y-%m-%d %H:%M:%S")
-        else:
-            start_dt = panel_start
-        expire_at = start_dt + timedelta(days=30)
+        expire_at = datetime.strptime(str(expire_str)[:19], "%Y-%m-%d %H:%M:%S")
         remaining = (expire_at - datetime.now()).days
         return max(remaining, 0)
     except Exception:
@@ -139,21 +138,21 @@ async def confirm_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("❌ موجودی کافی نیست.", show_alert=True)
             return
 
-        # برای پنل عادی: اعتبار نامحدود (panel_start خالی)
-        # برای حرفه‌ای و ویژه: 30 روز اعتبار
         if target_panel == "عادی":
             c.execute("""
                 UPDATE users
-                SET coins = coins - ?, panel = ?, panel_start = NULL, panel_days = 0
+                SET coins = coins - ?, panel = ?, panel_expire = NULL, panel_days = 0
                 WHERE user_id = ?
             """, (cost, target_panel, user_id))
         else:
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now = datetime.now()
+            expire_at = now + timedelta(days=30)
+            expire_str = expire_at.strftime("%Y-%m-%d %H:%M:%S")
             c.execute("""
                 UPDATE users
-                SET coins = coins - ?, panel = ?, panel_start = ?, panel_days = 30
+                SET coins = coins - ?, panel = ?, panel_expire = ?, panel_days = 30
                 WHERE user_id = ?
-            """, (cost, target_panel, now_str, user_id))
+            """, (cost, target_panel, expire_str, user_id))
 
         c.execute("""
             INSERT INTO transactions (from_id, amount, type, description)
