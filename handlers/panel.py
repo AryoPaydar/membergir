@@ -106,7 +106,6 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⁉️ آیا از ارتقا به پنل <b>{target_panel}</b> مطمئن هستید؟\n\n"
         f"💰 هزینه: {cost:,} سکه\n"
         f"💳 موجودی فعلی: {user['coins']:,} سکه\n"
-        f"💳 موجودی بعد از ارتقا: {user['coins'] - cost:,} سکه\n"
         f"⌛️ اعتبار: 30 روز",
         parse_mode="HTML",
         reply_markup=inline([
@@ -176,7 +175,6 @@ async def confirm_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id,
         f"🎉 تبریک! پنل شما به <b>{target_panel}</b> ارتقا یافت.\n\n"
         f"⌛️ اعتبار: {validity_text}\n"
-        f"💰 موجودی جدید: {new_user['coins']:,} سکه",
         parse_mode="HTML",
         reply_markup=main_menu(is_admin(user_id))
     )
