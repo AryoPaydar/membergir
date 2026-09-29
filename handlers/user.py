@@ -62,8 +62,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
     
-    if not await check_force_join(context, user.id):
-        return
     
     await msg.reply_text(
         start_text(user.first_name, user.id),
