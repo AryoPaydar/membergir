@@ -111,7 +111,6 @@ async def on_message(update: Update, context):
     if not is_admin(user_tg.id):
         from handlers.user import check_force_join
         if not await check_force_join(context, user_tg.id):
-            logger.info(f"🔐 User {user_tg.id} not joined force channels")
             return
 
     # ۱. State کاربر
@@ -225,7 +224,7 @@ async def on_callback(update: Update, context):
     if not is_admin(q.from_user.id) and q.data not in ("check_join",):
         from handlers.user import check_force_join
         if not await check_force_join(context, q.from_user.id):
-            await q.answer("🔐 ابتدا در کانال های اجباری عضو شوید!", show_alert=True)
+            await q.answer("🔐 ابتدا عضو کانال شوید!", show_alert=True)
             return
 
     modules = [
