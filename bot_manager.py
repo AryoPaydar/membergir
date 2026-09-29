@@ -248,6 +248,34 @@ def is_bot_on() -> bool:
 def set_bot_power(on: bool):
     set_setting("bot_power", "on" if on else "off")
 
+# ==================== بررسی انقضای پنل ====================
+def check_panel_expiry(user_id: int) -> bool:
+    """چک انقضای پنل. اگه گذشته بود، به عادی برگردون.
+    خروجی: True اگه منقضی شده بود، False اگه نه."""
+    from datetime import datetime
+
+    user = get_user(user_id)
+    if not user:
+        return False
+
+    panel = user.get("panel", "عادی")
+    if panel == "عادی":
+        return False
+
+    expire_str = user.get("panel_expire")
+    if not expire_str:
+        return False
+
+    try:
+        expire_at = datetime.strptime(str(expire_str)[:19], "%Y-%m-%d %H:%M:%S")
+        if datetime.now() >= expire_at:
+            update_user(user_id, panel="عادی", panel_expire=None, panel_days=0)
+            return True
+    except Exception:
+        pass
+
+    return False
+
 # ==================== بررسی پاداش زیرمجموعه ====================
 async def check_referral_milestone(context, user_id: int):
     user = get_user(user_id)
