@@ -59,7 +59,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # چک انقضای پنل
         if check_panel_expiry(user.id):
             await msg.reply_text(
-                "⏳ اعتبار پنل شما به پایان رسید و به پنل <b>عادی</b> بازگشتید.",
+                "⏳ اعتبار پنل شما به پایان رسید و به پنل <b>عادی</b> بازگشتید. در صورت تمایل میتوانید دوباره پنل خود را ارتقا دهید.",
                 parse_mode="HTML"
             )
     
