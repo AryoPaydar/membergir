@@ -274,10 +274,11 @@ class Database:
             """)
             
             # === کانال تبلیغات (برای جوین اجباری) ===
-            c.execute("""
+                c.execute("""
                     CREATE TABLE IF NOT EXISTS ads_channels_tg (
                         id          INTEGER PRIMARY KEY AUTOINCREMENT,
                         channel     TEXT NOT NULL,
+                        chat_id     INTEGER,
                         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
