@@ -56,7 +56,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     WHERE user_id = ?
                 """, (today, user.id))
         
-        # چک انقضای پنل
         if check_panel_expiry(user.id):
             await msg.reply_text(
                 "⏳ اعتبار پنل شما به پایان رسید و به پنل <b>عادی</b> بازگشتید. در صورت تمایل میتوانید دوباره پنل خود را ارتقا دهید.",
@@ -136,7 +135,6 @@ async def handle_referral_join(context, referrer_id, new_user_id):
 
 
 async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # چک انقضای پنل
     if check_panel_expiry(update.effective_user.id):
         await update.message.reply_text(
             "⏳ اعتبار پنل شما به پایان رسید و به پنل <b>عادی</b> بازگشتید.",
@@ -665,7 +663,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             return True
         return False
     
-    # ==== State پشتیبانی ====
     if state == "support_msg_input":
         if text == "🔙 انصراف":
             set_user_state(user_id, "none")
