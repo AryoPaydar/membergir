@@ -176,11 +176,11 @@ def set_setting(key: str, value: str):
         """, (key, str(value)))
 
 # ==================== بررسی عضویت ====================
+# ==================== بررسی عضویت ====================
 async def check_membership(context, channel: str, user_id: int) -> bool:
     if not channel:
         return True
 
-    # اگه chat_id عددی بود، مستقیم استفاده کن
     try:
         target = int(channel)
     except (ValueError, TypeError):
@@ -192,6 +192,20 @@ async def check_membership(context, channel: str, user_id: int) -> bool:
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"check_membership error for {target} user {user_id}: {e}")
+        return False
+
+
+async def check_bot_admin(context, channel: str) -> bool:
+    try:
+        me = await context.bot.get_me()
+        try:
+            target = int(channel)
+        except (ValueError, TypeError):
+            target = f"@{channel.lstrip('@')}"
+
+        member = await context.bot.get_chat_member(target, me.id)
+        return member.status in ("administrator", "creator")
+    except Exception:
         return False
 
 # ==================== پنل (اصلاح‌شده) ====================
