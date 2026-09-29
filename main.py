@@ -107,22 +107,16 @@ async def on_message(update: Update, context):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
         logger.info(f"✅ Created user {user_tg.id}")
 
-    # 👈 چک جوین اجباری (کانال تبلیغات + کانال‌های force) — فقط برای کاربران عادی
+    # ۱. State کاربر (فقط برای کاربران عادی)
     if not is_admin(user_tg.id):
-        from handlers.user import check_force_join
-        if not await check_force_join(context, user_tg.id):
-            logger.info(f"🔐 User {user_tg.id} not joined force channels")
-            return
-
-    # ۱. State کاربر
-    for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
-        if hasattr(module, "handle_state"):
-            try:
-                if await module.handle_state(update, context):
-                    logger.info(f"✅ {module.__name__}.handle_state handled")
-                    return
-            except Exception as e:
-                logger.exception(f"State error in {module.__name__}: {e}")
+        for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
+            if hasattr(module, "handle_state"):
+                try:
+                    if await module.handle_state(update, context):
+                        logger.info(f"✅ {module.__name__}.handle_state handled")
+                        return
+                except Exception as e:
+                    logger.exception(f"State error in {module.__name__}: {e}")
 
     # ۲. State ادمین
     if is_admin(user_tg.id):
@@ -171,7 +165,18 @@ async def on_message(update: Update, context):
 
         logger.info(f"❌ No admin handler for: '{text}'")
 
-    # ۳. دکمه‌های بانک
+    # ۳. State کاربر (اگه ادمین بود هم بتونه از استیت‌های کاربر استفاده کنه)
+    if is_admin(user_tg.id):
+        for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
+            if hasattr(module, "handle_state"):
+                try:
+                    if await module.handle_state(update, context):
+                        logger.info(f"✅ {module.__name__}.handle_state handled")
+                        return
+                except Exception as e:
+                    logger.exception(f"State error in {module.__name__}: {e}")
+
+    # ۴. دکمه‌های بانک
     if text == "💎 انتقال الماس":
         await history.transfer_start(update, context)
         return
@@ -188,7 +193,7 @@ async def on_message(update: Update, context):
         await user.back_to_menu(update, context)
         return
 
-    # ۴. دکمه‌های کاربر
+    # ۵. دکمه‌های کاربر
     if text in USER_BUTTONS:
         try:
             await USER_BUTTONS[text](update, context)
