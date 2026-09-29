@@ -5,7 +5,7 @@ from config import Config
 from bot_manager import (
     get_user, create_user, update_user, set_user_state, get_user_state,
     add_coins, get_daily_gift, is_admin, is_banned, check_membership,
-    get_panel_config, get_setting
+    get_panel_config, get_setting, check_panel_expiry
 )
 from utils.keyboards import (
     main_menu, back_button, inline, rules_back_keyboard, support_cancel_keyboard
@@ -55,6 +55,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     SET today_earned = 0, referral_today = 0, today_date = ?
                     WHERE user_id = ?
                 """, (today, user.id))
+        
+        # چک انقضای پنل
+        if check_panel_expiry(user.id):
+            await msg.reply_text(
+                "⏳ اعتبار پنل شما به پایان رسید و به پنل <b>عادی</b> بازگشتید.",
+                parse_mode="HTML"
+            )
     
     if not await check_force_join(context, user.id):
         return
@@ -129,6 +136,13 @@ async def handle_referral_join(context, referrer_id, new_user_id):
 
 
 async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # چک انقضای پنل
+    if check_panel_expiry(update.effective_user.id):
+        await update.message.reply_text(
+            "⏳ اعتبار پنل شما به پایان رسید و به پنل <b>عادی</b> بازگشتید.",
+            parse_mode="HTML"
+        )
+
     user = get_user(update.effective_user.id)
     if not user:
         await update.message.reply_text("لطفاً /start را بزنید.")
