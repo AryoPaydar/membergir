@@ -75,15 +75,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def check_force_join(context, user_id):
     missing = []
     
-    # کانال‌های force
     for ch in (Config.FORCE_CHANNEL_1, Config.FORCE_CHANNEL_2):
         if ch and not await check_membership(context, ch, user_id):
             missing.append(ch)
     
-    # کانال تبلیغات (ads_channel از settings، اگه نبود از Config)
-    ads_channel = get_setting("ads_channel", None) or Config.ADS_CHANNEL
-    if ads_channel and not await check_membership(context, ads_channel, user_id):
-        missing.append(ads_channel)
+    # چک همه کانال‌های تبلیغاتی
+    with db.conn() as c:
+        ads_list = c.execute("SELECT channel FROM ads_channels_tg").fetchall()
+    for row in ads_list:
+        ch = row["channel"]
+        if ch and not await check_membership(context, ch, user_id):
+            missing.append(ch)
     
     if not missing:
         return True
