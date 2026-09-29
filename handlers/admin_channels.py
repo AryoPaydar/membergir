@@ -41,7 +41,7 @@ async def channels_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "گزینه مورد نظر را انتخاب کنید",
         reply_markup=inline([
-            [("📋 تنظیم کانال تبلیغات", "ach_set_ads")],
+            [("📋 تنظیم کانال تبلیغات", "ach_ads_menu")],
             [("🎁 تنظیم کانال کد هدیه", "ach_set_gift")],
             [("🎗 کانال اسپانسر", "ach_sponsor_menu")],
             [("🚫 کانال های ممنوعه", "ach_banned_menu")],
@@ -79,22 +79,24 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
 
-    # ==== تنظیم کانال تبلیغات ====
-    if state == "ach_set_ads":
-        channel = text.strip().lstrip("@")
-        for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
-            if channel.startswith(prefix):
-                channel = channel[len(prefix):]
-                break
-        channel = channel.strip("/").split("/")[0].strip()
-
-        if not is_valid_username(channel):
-            await update.message.reply_text("❌ آیدی کانال نامعتبر است.")
+    # ==== افزودن کانال تبلیغات ====
+    if state == "ach_ads_add":
+        valid, channel = _is_valid_channel_id(text)
+        if not valid:
+            await update.message.reply_text(
+                "❌ آیدی نامعتبر.\n\nفرمت‌های مجاز:\n@dorv\nhttps://t.me/+RF3WEHVqJAYwNTM0"
+            )
             return True
-        set_setting("ads_channel", channel)
+        with db.conn() as c:
+            try:
+                c.execute("INSERT INTO sponsor_channels (channel) VALUES (?)", (channel,))
+            except Exception:
+                await update.message.reply_text("❌ این کانال قبلاً اضافه شده است.")
+                set_user_state(user_id, "none")
+                return True
         set_user_state(user_id, "none")
         await update.message.reply_text(
-            f"✅ کانال تبلیغات به @{channel} تنظیم شد",
+            "کانال / گروه ارسالی با موفقیت به کانال های تبلیغاتی اضافه شد",
             reply_markup=admin_panel()
         )
         return True
@@ -173,20 +175,87 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_admin(q.from_user.id):
         return False
 
-    if data == "ach_set_ads":
+    # ============ کانال تبلیغات ============
+    if data == "ach_ads_menu":
         await q.answer()
-        set_user_state(q.from_user.id, "ach_set_ads")
+        with db.conn() as c:
+            chs = c.execute("SELECT * FROM sponsor_channels ORDER BY id DESC").fetchall()
+
+        if not chs:
+            try:
+                await q.message.edit_text(
+                    "📋 کانال های تبلیغاتی:\n\n❌ هنوز کانالی اضافه نشده است.",
+                    reply_markup=inline([
+                        [("➕ افزودن کانال", "ach_ads_add_btn")],
+                        [("🔙 بازگشت به تنظیم کانال", "ach_channels_menu")],
+                    ])
+                )
+            except Exception:
+                pass
+            return True
+
+        rows = [[(f"📢 {ch['channel']}", f"ach_ads_view:{ch['id']}")] for ch in chs]
+        rows.append([("➕ افزودن کانال", "ach_ads_add_btn")])
+        rows.append([("🔙 بازگشت به تنظیم کانال", "ach_channels_menu")])
+
         try:
-            await q.message.delete()
+            await q.message.edit_text(
+                f"📋 کانال های تبلیغاتی:\n\n👥 تعداد : {len(chs)} کانال",
+                reply_markup=inline(rows)
+            )
         except Exception:
             pass
-        await context.bot.send_message(
-            q.from_user.id,
-            "آیدی کانال تبلیغات را ارسال کنید (بدون @):",
-            reply_markup=back_button()
+        return True
+
+    if data == "ach_ads_add_btn":
+        await q.answer()
+        set_user_state(q.from_user.id, "ach_ads_add")
+        try:
+            await q.message.edit_text(
+                "آیدی کانال تبلیغاتی مد نظر خود را وارد نمایید\n\nفرمت‌های مجاز:\n@dorv\nhttps://t.me/+RF3WEHVqJAYwNTM0",
+                reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("ach_ads_view:"):
+        await q.answer()
+        ch_id = int(data.split(":")[1])
+        with db.conn() as c:
+            ch = c.execute("SELECT * FROM sponsor_channels WHERE id = ?", (ch_id,)).fetchone()
+        if not ch:
+            await q.message.edit_text("❌ کانال یافت نشد.", reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]]))
+            return True
+        ch = dict(ch)
+        date_jalali = _format_jalali_date(ch["created_at"])
+        await q.message.edit_text(
+            f"📢 <b>مشخصات کانال تبلیغاتی</b>\n\n"
+            f"آیدی کانال : @{ch['channel']}\n"
+            f"زمان ثبت کانال : {date_jalali}",
+            parse_mode="HTML",
+            reply_markup=inline([
+                [("🗑 حذف", f"ach_ads_del:{ch_id}")],
+                [("🔙 بازگشت", "ach_ads_menu")],
+            ])
         )
         return True
 
+    if data.startswith("ach_ads_del:"):
+        ch_id = int(data.split(":")[1])
+        with db.conn() as c:
+            ch = c.execute("SELECT channel FROM sponsor_channels WHERE id = ?", (ch_id,)).fetchone()
+            if ch:
+                c.execute("DELETE FROM sponsor_channels WHERE id = ?", (ch_id,))
+        if ch:
+            await q.answer(f"کانال {ch['channel']} با موفقیت حذف شد", show_alert=True)
+        else:
+            await q.answer("❌ کانال یافت نشد.", show_alert=True)
+        q.data = "ach_ads_menu"
+        await handle_callback(update, context)
+        return True
+
+    # ============ تنظیم کانال کد هدیه ============
     if data == "ach_set_gift":
         await q.answer()
         set_user_state(q.from_user.id, "ach_set_gift")
@@ -373,7 +442,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await q.message.edit_text(
                 "گزینه مورد نظر را انتخاب کنید",
                 reply_markup=inline([
-                    [("📋 تنظیم کانال تبلیغات", "ach_set_ads")],
+                    [("📋 تنظیم کانال تبلیغات", "ach_ads_menu")],
                     [("🎁 تنظیم کانال کد هدیه", "ach_set_gift")],
                     [("🎗 کانال اسپانسر", "ach_sponsor_menu")],
                     [("🚫 کانال های ممنوعه", "ach_banned_menu")],
