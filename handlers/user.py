@@ -75,17 +75,39 @@ async def check_force_join(context, user_id):
 
     missing = []
 
+    # کانال‌های force
     for ch in (Config.FORCE_CHANNEL_1, Config.FORCE_CHANNEL_2):
         if ch and not await check_membership(context, ch, user_id):
             missing.append(ch)
 
+    # کانال‌های تبلیغاتی
     with db.conn() as c:
         ads_list = c.execute("SELECT channel, chat_id FROM ads_channels_tg").fetchall()
+
     for row in ads_list:
         ch = row["channel"]
         cid = row["chat_id"]
-        if ch and not await check_membership(context, ch, user_id, cid):
-            missing.append(ch)
+
+        # اگه لینک خصوصیه
+        if ch.startswith("+") or ch.startswith("joinchat"):
+            # چک pending_joins
+            if cid:
+                with db.conn() as c2:
+                    joined = c2.execute(
+                        "SELECT 1 FROM pending_joins WHERE user_id = ? AND chat_id = ?",
+                        (user_id, cid)
+                    ).fetchone()
+                # اگه ربات ادمین کاناله ولی کاربر pending نداره → missing
+                if not joined:
+                    # ولی فقط وقتی که ربات بتونه چک کنه (chat_id داریم)
+                    missing.append(ch)
+            else:
+                # chat_id نداریم → نمی‌تونیم چک کنیم → رد کن
+                pass
+        else:
+            # لینک عمومی — با یوزرنیم چک کن
+            if not await check_membership(context, ch, user_id, cid):
+                missing.append(ch)
 
     if not missing:
         return True
@@ -783,3 +805,4 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
     return False
+
