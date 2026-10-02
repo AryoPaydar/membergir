@@ -282,6 +282,16 @@ class Database:
                     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # === درخواست‌های عضویت (برای لینک‌های خصوصی) ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS pending_joins (
+                    user_id     INTEGER NOT NULL,
+                    chat_id     INTEGER NOT NULL,
+                    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, chat_id)
+                )
+            """)
             
             # === کانال ممنوعه ===
             c.execute("""
@@ -336,3 +346,4 @@ class Database:
 
 
 db = Database()
+
