@@ -72,17 +72,38 @@ def add_coins(user_id: int, amount: int, tx_type: str = "add", desc: str = ""):
         """, (user_id, amount, tx_type, desc))
 
 def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str = ""):
-    """کسر سکه — با چک موجودی"""
+    """کسر سکه — اول از credit_gift، بعد از coins"""
+    from utils.helpers import now_ts
+    now = now_ts()
     with db.conn() as c:
-        row = c.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,)).fetchone()
-        if not row or row["coins"] < amount:
+        user = c.execute(
+            "SELECT coins, credit_gift, credit_gift_expire FROM users WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+        if not user:
             return False
+
+        if user["coins"] < amount:
+            return False
+
+        # اول از credit_gift کم کن (اگه فعال باشه)
+        remaining = amount
+        if user["credit_gift"] > 0 and user["credit_gift_expire"] > now:
+            use_credit = min(remaining, user["credit_gift"])
+            c.execute(
+                "UPDATE users SET credit_gift = credit_gift - ? WHERE user_id = ?",
+                (use_credit, user_id)
+            )
+            remaining -= use_credit
+
+        # بعد از coins
         c.execute("""
             UPDATE users
             SET coins = coins - ?,
                 total_spent = total_spent + ?
             WHERE user_id = ?
         """, (amount, amount, user_id))
+
         c.execute("""
             INSERT INTO transactions (from_id, amount, type, description)
             VALUES (?, ?, ?, ?)
