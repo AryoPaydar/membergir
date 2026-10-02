@@ -119,7 +119,7 @@ async def on_message(update: Update, context):
             return
 
     # ۱. State کاربر
-    for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
+    for module in (user, history, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             try:
                 if await module.handle_state(update, context):
