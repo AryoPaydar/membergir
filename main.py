@@ -2,7 +2,7 @@ import logging
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ChatMemberHandler, filters
+    ChatMemberHandler, ChatJoinRequestHandler, filters
 )
 from config import Config
 from database import db
@@ -275,3 +275,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
