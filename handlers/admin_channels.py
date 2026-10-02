@@ -115,30 +115,53 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             )
             return True
 
-        # اگه یوزرنیم بود
         valid, channel = _is_valid_channel_id(text)
         if not valid:
             await update.message.reply_text(
                 "❌ آیدی نامعتبر.\n\n"
                 "فرمت‌های مجاز:\n"
-                "• یوزرنیم: `@channel_username`\n"
-                "• آیدی عددی: `-1001234567890`\n\n"
-                "⚠️ لینک دعوت (`+`) قابل قبول نیست.",
-                parse_mode="Markdown"
+                "@channel_username\n"
+                "https://t.me/+RF3WEHVqJAYwNTM0\n"
+                "-1001234567890"
             )
             return True
 
+        # اگه لینک دعوت بود
         if channel.startswith("+") or channel.startswith("joinchat"):
+            # chat_id رو از bot_chats پیدا کن
+            with db.conn() as c:
+                chats = c.execute("""
+                    SELECT chat_id, title, username, chat_type
+                    FROM bot_chats
+                    WHERE chat_type IN ('channel', 'supergroup', 'group')
+                    ORDER BY added_at DESC
+                """).fetchall()
+
+            if not chats:
+                await update.message.reply_text(
+                    "❌ ربات توی هیچ کانال یا گروهی ادمین نیست.\n\n"
+                    "👈 اول ربات رو توی کانال مورد نظر ادمین کن، بعد لینک رو بفرست.",
+                    reply_markup=admin_panel()
+                )
+                set_user_state(user_id, "none")
+                return True
+
+            rows = []
+            for ch in chats:
+                name = ch["title"] or ch["username"] or str(ch["chat_id"])
+                rows.append([(f"📢 {name[:40]}", f"ach_ads_pick:{ch['chat_id']}")])
+            rows.append([("🔙 بازگشت", "ach_ads_menu")])
+
+            set_user_state(user_id, "ach_ads_pick_from_list", {"link": channel})
+
             await update.message.reply_text(
-                "❌ لینک دعوت (`+`) قابل قبول نیست.\n\n"
-                "👈 لطفاً به یکی از این دو صورت وارد کن:\n"
-                "1. یوزرنیم کانال: `@channel_username`\n"
-                "2. آیدی عددی کانال: `-1001234567890`\n\n"
-                "📌 برای پیدا کردن آیدی عددی: یه پیام از کانال رو برای ربات @userinfobot فوروارد کن",
-                parse_mode="Markdown"
+                f"✅ لینک دعوت شناسایی شد.\n\n"
+                f"👈 کدوم کانال/گروه رو می‌خوای اضافه کنی؟",
+                reply_markup=inline(rows)
             )
             return True
 
+        # یوزرنیم
         chat_id = None
         title = channel
 
@@ -249,6 +272,53 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_admin(q.from_user.id):
         return False
 
+    # ============ انتخاب کانال از لیست (برای لینک دعوت) ============
+    if data.startswith("ach_ads_pick:"):
+        await q.answer()
+        chat_id = int(data.split(":")[1])
+
+        state, sdata = get_user_state(q.from_user.id)
+        link = sdata.get("link", "") if sdata else ""
+
+        with db.conn() as c:
+            ch = c.execute(
+                "SELECT chat_id, title, username FROM bot_chats WHERE chat_id = ?",
+                (chat_id,)
+            ).fetchone()
+
+        if not ch:
+            await q.answer("❌ کانال یافت نشد.", show_alert=True)
+            return True
+
+        title = ch["title"] or ch["username"] or str(chat_id)
+
+        with db.conn() as c:
+            existing = c.execute(
+                "SELECT 1 FROM ads_channels_tg WHERE chat_id = ?", (chat_id,)
+            ).fetchone()
+            if existing:
+                await q.answer("❌ این کانال قبلاً اضافه شده است.", show_alert=True)
+                return True
+
+            # اگه لینک دعوت داشتیم، اون رو به عنوان channel ذخیره کن
+            channel_display = link if link else (ch["username"] or str(chat_id))
+
+            c.execute(
+                "INSERT INTO ads_channels_tg (channel, chat_id, title) VALUES (?, ?, ?)",
+                (channel_display, chat_id, title)
+            )
+
+        set_user_state(q.from_user.id, "none")
+
+        try:
+            await q.message.edit_text(
+                f"✅ کانال «{title}» با موفقیت به کانال های تبلیغاتی اضافه شد",
+                reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]])
+            )
+        except Exception:
+            pass
+        return True
+
     # ============ کانال تبلیغات ============
     if data == "ach_ads_menu":
         await q.answer()
@@ -291,11 +361,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await q.message.edit_text(
                 "آیدی کانال تبلیغاتی مد نظر خود را وارد نمایید\n\n"
                 "فرمت‌های مجاز:\n"
-                "• یوزرنیم: `@channel_username`\n"
-                "• آیدی عددی: `-1001234567890`\n\n"
-                "⚠️ لینک دعوت (`+`) قابل قبول نیست\n"
+                "@channel_username\n"
+                "https://t.me/+RF3WEHVqJAYwNTM0\n"
+                "-1001234567890\n\n"
                 "⚠️ ربات باید ادمین کانال/گروه باشه",
-                parse_mode="Markdown",
                 reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]])
             )
         except Exception:
