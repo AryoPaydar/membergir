@@ -531,20 +531,157 @@ async def bc_show_failed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+# ==================== مدیریت ادمین‌ها ====================
 async def admins_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
-    rows = [[("📜 لیست مدیران", "admins_list")]]
+    rows = [
+        [("📜 لیست مدیران", "admins_list")],
+    ]
     if is_main_admin(update.effective_user.id):
         rows.append([("➕ افزودن", "admins_add"), ("➖ حذف", "admins_remove")])
-    await update.message.reply_text("👤 مدیریت ادمین‌ها:", reply_markup=inline(rows))
+    rows.append([("🔙 بازگشت به پنل مدیریت", "admins_back")])
+
+    await update.message.reply_text(
+        "👤 مدیریت ادمین‌ها:",
+        reply_markup=inline(rows)
+    )
+
+
+async def admins_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await context.bot.send_message(
+        q.from_user.id, "👑 پنل مدیریت",
+        reply_markup=admin_panel()
+    )
+
 
 async def admins_list_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+
+    owner_id = Config.ADMIN_ID
     admins = list_admins()
-    text = "📜 لیست مدیران:\n\n" + "\n".join(f"• <a href='tg://user?id={a}'>{a}</a>" for a in admins)
-    await q.message.reply_text(text, parse_mode="HTML")
+    admins = [a for a in admins if a != owner_id]
+
+    owner_mention = f"<a href='tg://user?id={owner_id}'>{owner_id}</a>"
+
+    text = (
+        f"📜 <b>لیست مدیران</b>:\n"
+        f"\n"
+        f"مالک 👑 : {owner_mention}\n"
+        f"—————————————\n"
+        f"مدیران :\n"
+    )
+
+    if not admins:
+        text += "❌ هیچ مدیری وجود ندارد.\n"
+    else:
+        for a in admins:
+            text += f"• <a href='tg://user?id={a}'>{a}</a>\n"
+
+    rows = []
+    if is_main_admin(q.from_user.id):
+        rows.append([("👤 مدیران", "admins_show_list"),
+                     ("➕ افزودن", "admins_add")])
+        rows.append([("➖ حذف", "admins_remove")])
+    rows.append([("🔙 بازگشت به مدیریت مدیران", "admins_menu_back")])
+
+    try:
+        await q.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=inline(rows)
+        )
+    except Exception:
+        pass
+
+
+async def admins_menu_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    rows = [
+        [("📜 لیست مدیران", "admins_list")],
+    ]
+    if is_main_admin(q.from_user.id):
+        rows.append([("➕ افزودن", "admins_add"), ("➖ حذف", "admins_remove")])
+    rows.append([("🔙 بازگشت به پنل مدیریت", "admins_back")])
+
+    try:
+        await q.message.edit_text(
+            "👤 مدیریت ادمین‌ها:",
+            reply_markup=inline(rows)
+        )
+    except Exception:
+        pass
+
+
+async def admins_show_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await admins_list_cb(update, context)
+
+
+async def admins_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    if not is_main_admin(q.from_user.id):
+        await q.answer("❌ فقط مالک می‌تواند ادمین اضافه کند.", show_alert=True)
+        return
+    from bot_manager import set_user_state
+    set_user_state(q.from_user.id, "admins_add_input")
+    await q.message.reply_text(
+        "🆔 آیدی عددی کاربر مورد نظر را ارسال کنید:",
+        reply_markup=back_button()
+    )
+
+
+async def admins_remove_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    if not is_main_admin(q.from_user.id):
+        await q.answer("❌ فقط مالک می‌تواند ادمین حذف کند.", show_alert=True)
+        return
+
+    admins = list_admins()
+    admins = [a for a in admins if a != Config.ADMIN_ID]
+
+    if not admins:
+        await q.answer("❌ هیچ مدیری وجود ندارد.", show_alert=True)
+        return
+
+    rows = []
+    for a in admins:
+        rows.append([(f"👤 {a}", f"admins_del:{a}")])
+    rows.append([("🔙 بازگشت", "admins_list")])
+
+    try:
+        await q.message.edit_text(
+            "👈 کدام مدیر را می‌خواهید حذف کنید؟",
+            reply_markup=inline(rows)
+        )
+    except Exception:
+        pass
+
+
+async def admins_del_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    if not is_main_admin(q.from_user.id):
+        await q.answer("❌ فقط مالک می‌تواند ادمین حذف کند.", show_alert=True)
+        return
+
+    admin_id = int(q.data.split(":")[1])
+    remove_admin(admin_id)
+
+    await q.answer(f"✅ کاربر {admin_id} از مدیران حذف شد.", show_alert=True)
+
+    q.data = "admins_list"
+    await admins_list_cb(update, context)
+
 
 async def id_finder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
@@ -630,7 +767,6 @@ async def view_support_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def support_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """شروع پاسخ به کاربر"""
     q = update.callback_query
     await q.answer()
     user_id = q.from_user.id
@@ -700,9 +836,8 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     msg = update.message
     text = (msg.text or "").strip()
     
-    # 👈 چک دکمه بازگشت برای state های broadcast
     if text in ("🔙 بازگشت", "🔙 بازگشت به پنل مدیریت"):
-        if state.startswith("bc_"):
+        if state.startswith("bc_") or state == "admins_add_input":
             set_user_state(user.id, "none")
             await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
             return True
@@ -745,6 +880,31 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             else:
                 await msg.reply_text("❌ کاربر یافت نشد.")
             set_user_state(user.id, "none")
+            return True
+    
+    if state == "admins_add_input":
+        if text == "🔙 بازگشت":
+            set_user_state(user.id, "none")
+            await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
+            return True
+        if is_positive_int(text):
+            target = int(text)
+            if is_admin(target):
+                await msg.reply_text("❌ این کاربر قبلاً مدیر است.")
+            else:
+                add_admin(target, user.id)
+                await msg.reply_text(f"✅ کاربر {target} به مدیران اضافه شد.")
+                try:
+                    await context.bot.send_message(
+                        target,
+                        "🎉 شما به عنوان مدیر ربات انتخاب شدید."
+                    )
+                except Exception:
+                    pass
+            set_user_state(user.id, "none")
+            return True
+        else:
+            await msg.reply_text("❌ فقط آیدی عددی مجاز است.")
             return True
     
     if state == "bc_text":
@@ -903,9 +1063,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except Exception:
             pass
         return True
+    
+    # ============ مدیریت ادمین‌ها ============
     if data == "admins_list":
         await admins_list_cb(update, context)
         return True
+    if data == "admins_menu_back":
+        await admins_menu_back(update, context)
+        return True
+    if data == "admins_show_list":
+        await admins_show_list(update, context)
+        return True
+    if data == "admins_add":
+        await admins_add_start(update, context)
+        return True
+    if data == "admins_remove":
+        await admins_remove_start(update, context)
+        return True
+    if data.startswith("admins_del:"):
+        await admins_del_confirm(update, context)
+        return True
+    if data == "admins_back":
+        await admins_back(update, context)
+        return True
+    
     if data == "toggle_power":
         await q.answer()
         set_bot_power(not is_bot_on())
