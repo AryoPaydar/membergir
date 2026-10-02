@@ -65,7 +65,47 @@ ADMIN_BUTTONS = {
 }
 
 
-# ==================== ردیاب کانال/گروه ====================
+# ==================== چک انقضای هدیه اعتباری ====================
+async def _handle_credit_gift_expiry(context, user_id: int):
+    """اگه هدیه اعتباری منقضی شده، از coins کم کن و پیام بفرست"""
+    from utils.helpers import now_ts
+    now = now_ts()
+
+    with db.conn() as c:
+        row = c.execute("""
+            SELECT credit_gift, credit_gift_expire, coins
+            FROM users
+            WHERE user_id = ? AND credit_gift > 0 AND credit_gift_expire > 0 AND credit_gift_expire <= ?
+        """, (user_id, now)).fetchone()
+
+    if not row:
+        return
+
+    lost = row["credit_gift"]
+    if lost <= 0:
+        return
+
+    with db.conn() as c:
+        c.execute("""
+            UPDATE users SET
+                coins = MAX(0, coins - ?),
+                credit_gift = 0,
+                credit_gift_expire = 0
+            WHERE user_id = ?
+        """, (lost, user_id))
+
+    logger.info(f"⏰ Credit gift expired for {user_id}, lost={lost}")
+
+    try:
+        await context.bot.send_message(
+            user_id,
+            f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
+            f"💸 مقدار هدیه از دست رفته : {lost:,}"
+        )
+    except Exception as e:
+        logger.error(f"credit gift expiry msg error: {e}")
+
+
 async def track_chat(update: Update, context):
     my_chat_member = update.my_chat_member
     if not my_chat_member:
@@ -94,7 +134,6 @@ async def on_message(update: Update, context):
     msg = update.message
     text = (msg.text or "").strip()
 
-    # فقط چت خصوصی
     if update.effective_chat.type != "private":
         return
 
@@ -112,14 +151,16 @@ async def on_message(update: Update, context):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
         logger.info(f"✅ Created user {user_tg.id}")
 
-    # 👈 چک جوین اجباری برای کاربران عادی (به جز /start)
+    # 👈 چک انقضای هدیه اعتباری
+    await _handle_credit_gift_expiry(context, user_tg.id)
+
+    # چک جوین اجباری
     if not is_admin(user_tg.id) and not text.startswith("/start"):
         from handlers.user import check_force_join
         if not await check_force_join(context, user_tg.id):
             logger.info(f"🔐 User {user_tg.id} not joined force channels")
             return
 
-    # ۱. State کاربر
     for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             try:
@@ -129,14 +170,12 @@ async def on_message(update: Update, context):
             except Exception as e:
                 logger.exception(f"State error in {module.__name__}: {e}")
 
-    # ۲. State ادمین
     if is_admin(user_tg.id):
         logger.info(f"👑 User {user_tg.id} is admin")
 
         if text == "🔙 بازگشت به پنل مدیریت":
             set_user_state(user_tg.id, "none")
             await msg.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
-            logger.info("✅ بازگشت به پنل مدیریت")
             return
 
         admin_modules = (
@@ -174,9 +213,6 @@ async def on_message(update: Update, context):
             except Exception as e:
                 logger.exception(f"ADMIN_BUTTON error for '{text}': {e}")
 
-        logger.info(f"❌ No admin handler for: '{text}'")
-
-    # ۳. دکمه‌های بانک
     if text == "💎 انتقال الماس":
         await history.transfer_start(update, context)
         return
@@ -193,7 +229,6 @@ async def on_message(update: Update, context):
         await user.back_to_menu(update, context)
         return
 
-    # ۴. دکمه‌های کاربر
     if text in USER_BUTTONS:
         try:
             await USER_BUTTONS[text](update, context)
@@ -204,7 +239,6 @@ async def on_message(update: Update, context):
 
     if text == "🔙 بازگشت":
         await user.back_to_menu(update, context)
-        logger.info("✅ back_to_menu handled")
         return
 
     logger.info(f"❓ Unknown command: '{text}'")
@@ -226,7 +260,9 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
 
-    # 👈 چک جوین اجباری برای کاربران عادی (به جز callback عضویت)
+    # 👈 چک انقضای هدیه اعتباری
+    await _handle_credit_gift_expiry(context, q.from_user.id)
+
     if not is_admin(q.from_user.id) and q.data not in ("check_join",):
         from handlers.user import check_force_join
         if not await check_force_join(context, q.from_user.id):
@@ -261,6 +297,48 @@ async def on_callback(update: Update, context):
         pass
 
 
+async def check_all_credit_gifts(context):
+    """هر دقیقه چک انقضای همه هدیه‌های اعتباری"""
+    from utils.helpers import now_ts
+    now = now_ts()
+
+    with db.conn() as c:
+        expired = c.execute("""
+            SELECT user_id, credit_gift FROM users
+            WHERE credit_gift > 0 AND credit_gift_expire > 0 AND credit_gift_expire <= ?
+        """, (now,)).fetchall()
+        expired_users = [dict(r) for r in expired]
+
+    if not expired_users:
+        return
+
+    logger.info(f"⏰ Found {len(expired_users)} expired credit gifts")
+
+    for row in expired_users:
+        uid = row["user_id"]
+        lost = row["credit_gift"]
+
+        with db.conn() as c:
+            c.execute("""
+                UPDATE users SET
+                    coins = MAX(0, coins - ?),
+                    credit_gift = 0,
+                    credit_gift_expire = 0
+                WHERE user_id = ?
+            """, (lost, uid))
+
+        logger.info(f"⏰ Credit gift expired for {uid}, lost={lost}")
+
+        try:
+            await context.bot.send_message(
+                uid,
+                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
+                f"💸 مقدار هدیه از دست رفته : {lost:,}"
+            )
+        except Exception as e:
+            logger.error(f"credit gift msg error to {uid}: {e}")
+
+
 async def on_join_request(update: Update, context):
     req = update.chat_join_request
     if not req:
@@ -287,40 +365,6 @@ async def on_join_request(update: Update, context):
     logger.info(f"✅ Join request از {user_id} برای chat_id={chat_id} ثبت شد")
 
 
-async def check_all_credit_gifts(context):
-    """هر دقیقه چک کن که هدیه اعتباری منقضی شده یا نه"""
-    from utils.helpers import now_ts
-    now = now_ts()
-
-    with db.conn() as c:
-        expired = c.execute("""
-            SELECT user_id, credit_gift FROM users
-            WHERE credit_gift > 0 AND credit_gift_expire > 0 AND credit_gift_expire <= ?
-        """, (now,)).fetchall()
-        expired_users = [dict(r) for r in expired]
-
-    for row in expired_users:
-        uid = row["user_id"]
-        lost = row["credit_gift"]
-
-        with db.conn() as c:
-            c.execute("""
-                UPDATE users SET
-                    credit_gift = 0,
-                    credit_gift_expire = 0
-                WHERE user_id = ?
-            """, (uid,))
-
-        try:
-            await context.bot.send_message(
-                uid,
-                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
-                f"💸 مقدار هدیه از دست رفته : {lost:,}"
-            )
-        except Exception:
-            pass
-
-
 async def on_error(update: object, context):
     logger.error(f"Exception: {context.error}", exc_info=context.error)
 
@@ -342,10 +386,12 @@ def main():
     app.add_handler(ChatJoinRequestHandler(on_join_request))
     app.add_error_handler(on_error)
 
-    # JobQueue برای چک انقضای هدیه اعتباری
+    # JobQueue
     if app.job_queue:
         app.job_queue.run_repeating(check_all_credit_gifts, interval=60, first=10)
         logger.info("✅ JobQueue for credit gifts started")
+    else:
+        logger.warning("⚠️ JobQueue is None - install python-telegram-bot[job-queue]")
 
     logger.info("Bot is running.")
     app.run_polling(
