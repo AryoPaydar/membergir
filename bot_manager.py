@@ -180,10 +180,12 @@ async def check_membership(context, channel: str, user_id: int, chat_id: int = N
     if not channel and not chat_id:
         return True
     try:
-        target = chat_id if chat_id else (
-            int(channel) if str(channel).lstrip("-").isdigit()
-            else f"@{channel.lstrip('@')}"
-        )
+        if chat_id:
+            target = chat_id
+        elif str(channel).lstrip("-").isdigit():
+            target = int(channel)
+        else:
+            target = f"@{channel.lstrip('@')}"
     except (ValueError, TypeError):
         target = f"@{channel.lstrip('@')}" if channel else None
 
@@ -196,6 +198,7 @@ async def check_membership(context, channel: str, user_id: int, chat_id: int = N
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"check_membership error for {target} user {user_id}: {e}")
+        # اگه ربات ادمین نیست یا خطا داد → تایید کن
         return True
 
 
@@ -353,3 +356,4 @@ async def check_referral_milestone(context, user_id: int):
         )
     except Exception:
         pass
+
