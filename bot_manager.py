@@ -111,6 +111,24 @@ def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str =
         """, (user_id, amount, tx_type, desc))
         return True
 
+def transfer_coins(from_id: int, to_id: int, amount: int) -> bool:
+    """انتقال اتمیک سکه بین دو کاربر"""
+    if amount <= 0 or from_id == to_id:
+        return False
+    with db.conn() as c:
+        row = c.execute("SELECT coins FROM users WHERE user_id = ?", (from_id,)).fetchone()
+        if not row or row["coins"] < amount:
+            return False
+        c.execute("UPDATE users SET coins = coins - ?, sent_coins = sent_coins + ?, total_spent = total_spent + ? WHERE user_id = ?",
+                  (amount, amount, amount, from_id))
+        c.execute("UPDATE users SET coins = coins + ?, received_coins = received_coins + ?, total_earned = total_earned + ? WHERE user_id = ?",
+                  (amount, amount, amount, to_id))
+        c.execute("""
+            INSERT INTO transactions (from_id, to_id, amount, type, description)
+            VALUES (?, ?, ?, 'transfer', ?)
+        """, (from_id, to_id, amount, f"انتقال از {from_id} به {to_id}"))
+        return True
+
 # ==================== ادمین ====================
 def is_admin(user_id: int) -> bool:
     if user_id == Config.ADMIN_ID:
