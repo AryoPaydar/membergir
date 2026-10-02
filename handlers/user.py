@@ -675,6 +675,11 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             return True
         return False
 
+    # استیت کد هدیه کاربر عادی
+    if state == "gift_code":
+        from handlers import gift
+        return await gift.handle_state(update, context)
+
     if state == "support_msg_input":
         if text == "🔙 انصراف":
             set_user_state(user_id, "none")
