@@ -341,7 +341,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     text = (update.message.text or "").strip()
 
     if not state or state == "none":
-        # State کد کاربر عادی
         return False
 
     # دکمه بازگشت
@@ -351,7 +350,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         return True
 
     if not is_admin(user_id):
-        # فقط استیت‌های کاربر عادی
         if state == "gift_code":
             if text == "🔙 انصراف":
                 set_user_state(user_id, "none")
@@ -366,7 +364,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     # ====== ادمین ======
 
-    # مرحله 1: همه کاربران - دریافت مقدار سکه
     if state == "gc_input_amount":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -380,7 +377,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # مرحله 2: دریافت زمان
     if state == "gc_input_time":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -389,7 +385,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         amount = data.get("amount", 0)
         mode = data.get("mode", "all")
 
-        # ذخیره برای تأیید
         set_user_state(user_id, "gc_confirm", {
             "mode": mode,
             "amount": amount,
@@ -412,7 +407,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # کاربران دارای سکه مشخص - دریافت سقف سکه
     if state == "gc_input_coins_limit":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -425,7 +419,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # کاربر خاص - دریافت آیدی
     if state == "gc_input_specific_user":
         query_clean = text.strip().lstrip("@")
         with db.conn() as c:
@@ -457,7 +450,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # هدیه اعتباری گروه - کد
     if state == "gc_group_code":
         set_user_state(user_id, "gc_group_amount", {"code": text})
         await update.message.reply_text(
@@ -466,7 +458,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # هدیه اعتباری گروه - مقدار
     if state == "gc_group_amount":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -478,7 +469,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # هدیه اعتباری گروه - تعداد
     if state == "gc_group_max":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -490,7 +480,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # هدیه اعتباری گروه - زمان
     if state == "gc_group_time":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -591,7 +580,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_admin(user_id):
         return False
 
-    # نوع هدیه
     if data == "gift_type_credit":
         await gift_credit_menu(update, context)
         return True
@@ -605,7 +593,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await gift_admin_back(update, context)
         return True
 
-    # هدیه اعتباری
     if data == "gc_user_send":
         await gc_user_send(update, context)
         return True
@@ -634,17 +621,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await gc_credit_history(update, context)
         return True
 
-    # تأیید ارسال کاربر
     if data == "gc_confirm_yes":
         await gc_confirm_send_users(update, context)
         return True
 
-    # تأیید ارسال گروه
     if data == "gc_group_confirm_yes":
         await gc_group_confirm_send(update, context)
         return True
 
-    # ====== منوی دائمی (قدیمی) ======
     if data == "gift_admin_group":
         await gift_admin_group(update, context)
         return True
@@ -734,10 +718,12 @@ async def gc_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TY
 
     sent = 0
     failed = 0
+    import logging
+    log = logging.getLogger(__name__)
+
     for u in users:
         uid = u["user_id"] if isinstance(u, dict) else u["user_id"]
         try:
-            # ذخیره هدیه اعتباری
             with db.conn() as c:
                 c.execute("""
                     INSERT INTO credit_gifts (user_id, amount, expire_at, created_at)
@@ -746,10 +732,18 @@ async def gc_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TY
 
                 c.execute("""
                     UPDATE users SET
-                        credit_gift = credit_gift + ?,
-                        credit_gift_expire = ?
+                        credit_gift = COALESCE(credit_gift, 0) + ?,
+                        credit_gift_expire = ?,
+                        coins = coins + ?,
+                        total_earned = total_earned + ?
                     WHERE user_id = ?
-                """, (amount, expire_at, uid))
+                """, (amount, expire_at, amount, amount, uid))
+
+                row = c.execute(
+                    "SELECT coins, credit_gift FROM users WHERE user_id = ?",
+                    (uid,)
+                ).fetchone()
+                log.info(f"✅ credit_gift sent to {uid}: coins={row['coins']}, credit_gift={row['credit_gift']}")
 
             await context.bot.send_message(
                 uid,
@@ -759,8 +753,9 @@ async def gc_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TY
                 f"⚠️ بعد از این زمان، سکه‌های مصرف‌نشده از بین می‌روند."
             )
             sent += 1
-        except Exception:
+        except Exception as e:
             failed += 1
+            log.error(f"❌ gc send error to {uid}: {e}")
 
     set_user_state(user_id, "none")
     await context.bot.send_message(
