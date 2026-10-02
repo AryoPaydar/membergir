@@ -7,7 +7,8 @@ from telegram.ext import (
 from config import Config
 from database import db
 from bot_manager import (
-    get_user, create_user, is_admin, is_banned, is_bot_on, get_setting, set_user_state
+    get_user, create_user, is_admin, is_banned, is_bot_on, get_setting,
+    set_user_state, check_credit_gift_expiry
 )
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
@@ -93,7 +94,7 @@ async def on_message(update: Update, context):
     msg = update.message
     text = (msg.text or "").strip()
 
-    # 👈 فقط چت خصوصی
+    # فقط چت خصوصی
     if update.effective_chat.type != "private":
         return
 
@@ -111,6 +112,17 @@ async def on_message(update: Update, context):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
         logger.info(f"✅ Created user {user_tg.id}")
 
+    # 👈 چک انقضای هدیه اعتباری
+    lost = check_credit_gift_expiry(user_tg.id)
+    if lost > 0:
+        try:
+            await msg.reply_text(
+                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
+                f"💸 مقدار هدیه از دست رفته : {lost:,}"
+            )
+        except Exception:
+            pass
+
     # 👈 چک جوین اجباری برای کاربران عادی (به جز /start)
     if not is_admin(user_tg.id) and not text.startswith("/start"):
         from handlers.user import check_force_join
@@ -119,7 +131,7 @@ async def on_message(update: Update, context):
             return
 
     # ۱. State کاربر
-    for module in (user, history, ads, transfer, referral, shop, panel, orders_history):
+    for module in (user, history, gift, ads, transfer, referral, shop, panel, orders_history):
         if hasattr(module, "handle_state"):
             try:
                 if await module.handle_state(update, context):
@@ -225,6 +237,18 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
 
+    # 👈 چک انقضای هدیه اعتباری
+    lost = check_credit_gift_expiry(q.from_user.id)
+    if lost > 0:
+        try:
+            await context.bot.send_message(
+                q.from_user.id,
+                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
+                f"💸 مقدار هدیه از دست رفته : {lost:,}"
+            )
+        except Exception:
+            pass
+
     # 👈 چک جوین اجباری برای کاربران عادی (به جز callback عضویت)
     if not is_admin(q.from_user.id) and q.data not in ("check_join",):
         from handlers.user import check_force_join
@@ -261,7 +285,6 @@ async def on_callback(update: Update, context):
 
 
 async def on_join_request(update: Update, context):
-    """وقتی کاربر درخواست عضویت در کانال خصوصی می‌ده"""
     req = update.chat_join_request
     if not req:
         return
