@@ -72,39 +72,43 @@ def add_coins(user_id: int, amount: int, tx_type: str = "add", desc: str = ""):
         """, (user_id, amount, tx_type, desc))
 
 def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str = ""):
-    """کسر سکه — با چک موجودی"""
+    """کسر سکه — اول از هدیه اعتباری، بعد از coins"""
+    from utils.helpers import now_ts
+    now = now_ts()
     with db.conn() as c:
-        row = c.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,)).fetchone()
-        if not row or row["coins"] < amount:
+        user = c.execute(
+            "SELECT coins, credit_gift, credit_gift_expire FROM users WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+        if not user:
             return False
-        c.execute("""
-            UPDATE users
-            SET coins = coins - ?,
-                total_spent = total_spent + ?
-            WHERE user_id = ?
-        """, (amount, amount, user_id))
+
+        total_available = user["coins"]
+        if user["credit_gift"] > 0 and user["credit_gift_expire"] > now:
+            total_available += user["credit_gift"]
+
+        if total_available < amount:
+            return False
+
+        remaining = amount
+        if user["credit_gift"] > 0 and user["credit_gift_expire"] > now:
+            use_credit = min(remaining, user["credit_gift"])
+            c.execute(
+                "UPDATE users SET credit_gift = credit_gift - ? WHERE user_id = ?",
+                (use_credit, user_id)
+            )
+            remaining -= use_credit
+
+        if remaining > 0:
+            c.execute(
+                "UPDATE users SET coins = coins - ?, total_spent = total_spent + ? WHERE user_id = ?",
+                (remaining, remaining, user_id)
+            )
+
         c.execute("""
             INSERT INTO transactions (from_id, amount, type, description)
             VALUES (?, ?, ?, ?)
         """, (user_id, amount, tx_type, desc))
-        return True
-
-def transfer_coins(from_id: int, to_id: int, amount: int) -> bool:
-    """انتقال اتمیک سکه بین دو کاربر"""
-    if amount <= 0 or from_id == to_id:
-        return False
-    with db.conn() as c:
-        row = c.execute("SELECT coins FROM users WHERE user_id = ?", (from_id,)).fetchone()
-        if not row or row["coins"] < amount:
-            return False
-        c.execute("UPDATE users SET coins = coins - ?, sent_coins = sent_coins + ?, total_spent = total_spent + ? WHERE user_id = ?",
-                  (amount, amount, amount, from_id))
-        c.execute("UPDATE users SET coins = coins + ?, received_coins = received_coins + ?, total_earned = total_earned + ? WHERE user_id = ?",
-                  (amount, amount, amount, to_id))
-        c.execute("""
-            INSERT INTO transactions (from_id, to_id, amount, type, description)
-            VALUES (?, ?, ?, 'transfer', ?)
-        """, (from_id, to_id, amount, f"انتقال از {from_id} به {to_id}"))
         return True
 
 # ==================== ادمین ====================
