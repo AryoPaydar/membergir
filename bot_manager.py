@@ -198,7 +198,6 @@ async def check_membership(context, channel: str, user_id: int, chat_id: int = N
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"check_membership error for {target} user {user_id}: {e}")
-        # اگه ربات ادمین نیست یا خطا داد → تایید کن
         return True
 
 
@@ -217,41 +216,26 @@ async def check_bot_admin(context, channel: str) -> bool:
 
 # ==================== پنل (اصلاح‌شده) ====================
 def get_panel_config(panel_name: str) -> dict:
-    """
-    تنظیمات پنل رو برمیگردونه.
-    اول از settings (دیتابیس) میخونه، اگه نبود از Config.PANELS
-    """
-    # پیش‌فرض از Config
     default_cfg = Config.PANELS.get(panel_name, Config.PANELS["عادی"])
-    result = dict(default_cfg)  # کپی
-    
-    # مپ پنل به کلید توی settings
+    result = dict(default_cfg)
     key_map = {
         "عادی":    "normal",
         "حرفه ای": "pro",
         "ویژه":    "vip",
     }
     prefix = key_map.get(panel_name, "normal")
-    
-    # خوندن از settings
     try:
-        # سکه روزانه
         val = get_setting(f"panel_{prefix}_daily", None)
         if val is not None:
             result["daily"] = int(float(val))
-        
-        # سکه عضویت
         val = get_setting(f"panel_{prefix}_join_coin", None)
         if val is not None:
             result["join_coin"] = float(val)
-        
-        # سکه زیرمجموعه
         val = get_setting(f"panel_{prefix}_invite_coin", None)
         if val is not None:
             result["invite_coin"] = int(float(val))
     except Exception:
         pass
-    
     return result
 
 def get_daily_gift(user: dict) -> int:
@@ -272,8 +256,6 @@ def set_bot_power(on: bool):
 
 # ==================== بررسی انقضای پنل ====================
 def check_panel_expiry(user_id: int) -> bool:
-    """چک انقضای پنل. اگه گذشته بود، به عادی برگردون.
-    خروجی: True اگه منقضی شده بود، False اگه نه."""
     from datetime import datetime
 
     user = get_user(user_id)
@@ -303,22 +285,22 @@ async def check_referral_milestone(context, user_id: int):
     user = get_user(user_id)
     if not user:
         return
-    
+
     referrer_id = user.get("referrer_id")
     if not referrer_id:
         return
-    
+
     if user.get("referral_rewarded"):
         return
-    
+
     threshold = int(get_setting("referral_join_threshold", str(Config.REFERRAL_JOIN_THRESHOLD)))
     if user.get("ads_joined", 0) < threshold:
         return
-    
+
     referrer = get_user(referrer_id)
     if not referrer:
         return
-    
+
     panel_cfg = get_panel_config(referrer.get("panel", "عادی"))
     invite_coin = panel_cfg["invite_coin"]
     commission_percent = {
@@ -326,20 +308,20 @@ async def check_referral_milestone(context, user_id: int):
         "حرفه ای": 10,
         "ویژه": 15,
     }.get(referrer.get("panel", "عادی"), 5)
-    
+
     add_coins(
         referrer_id, invite_coin, "referral_commission",
         f"پاداش زیرمجموعه {user_id} بعد از {threshold} عضویت"
     )
-    
+
     update_user(user_id, referral_rewarded=1)
-    
+
     with db.conn() as c:
         c.execute(
             "UPDATE users SET referral_today = referral_today + 1 WHERE user_id = ?",
             (referrer_id,)
         )
-    
+
     try:
         await context.bot.send_message(
             referrer_id,
@@ -356,4 +338,3 @@ async def check_referral_milestone(context, user_id: int):
         )
     except Exception:
         pass
-
