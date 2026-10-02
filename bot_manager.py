@@ -72,39 +72,17 @@ def add_coins(user_id: int, amount: int, tx_type: str = "add", desc: str = ""):
         """, (user_id, amount, tx_type, desc))
 
 def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str = ""):
-    """کسر سکه — اول از هدیه اعتباری، بعد از coins"""
-    from utils.helpers import now_ts
-    now = now_ts()
+    """کسر سکه — با چک موجودی"""
     with db.conn() as c:
-        user = c.execute(
-            "SELECT coins, credit_gift, credit_gift_expire FROM users WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()
-        if not user:
+        row = c.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        if not row or row["coins"] < amount:
             return False
-
-        total_available = user["coins"]
-        if user["credit_gift"] > 0 and user["credit_gift_expire"] > now:
-            total_available += user["credit_gift"]
-
-        if total_available < amount:
-            return False
-
-        remaining = amount
-        if user["credit_gift"] > 0 and user["credit_gift_expire"] > now:
-            use_credit = min(remaining, user["credit_gift"])
-            c.execute(
-                "UPDATE users SET credit_gift = credit_gift - ? WHERE user_id = ?",
-                (use_credit, user_id)
-            )
-            remaining -= use_credit
-
-        if remaining > 0:
-            c.execute(
-                "UPDATE users SET coins = coins - ?, total_spent = total_spent + ? WHERE user_id = ?",
-                (remaining, remaining, user_id)
-            )
-
+        c.execute("""
+            UPDATE users
+            SET coins = coins - ?,
+                total_spent = total_spent + ?
+            WHERE user_id = ?
+        """, (amount, amount, user_id))
         c.execute("""
             INSERT INTO transactions (from_id, amount, type, description)
             VALUES (?, ?, ?, ?)
@@ -302,6 +280,37 @@ def check_panel_expiry(user_id: int) -> bool:
 
     return False
 
+# ==================== بررسی انقضای هدیه اعتباری ====================
+def check_credit_gift_expiry(user_id: int) -> int:
+    """اگه هدیه اعتباری منقضی شده، مقدار مصرف‌نشده رو از coins کم کن و برگردون.
+    خروجی: مقدار از دست رفته (0 اگه منقضی نشده)"""
+    from utils.helpers import now_ts
+    now = now_ts()
+    user = get_user(user_id)
+    if not user:
+        return 0
+
+    credit_gift = user.get("credit_gift", 0) or 0
+    credit_expire = user.get("credit_gift_expire", 0) or 0
+
+    if credit_gift <= 0 or credit_expire <= 0:
+        return 0
+
+    if credit_expire > now:
+        return 0
+
+    # منقضی شده
+    lost = credit_gift
+    with db.conn() as c:
+        c.execute("""
+            UPDATE users SET
+                coins = MAX(0, coins - ?),
+                credit_gift = 0,
+                credit_gift_expire = 0
+            WHERE user_id = ?
+        """, (lost, user_id))
+    return lost
+
 # ==================== بررسی پاداش زیرمجموعه ====================
 async def check_referral_milestone(context, user_id: int):
     user = get_user(user_id)
@@ -351,7 +360,7 @@ async def check_referral_milestone(context, user_id: int):
             f"\n"
             f"🎁 دریافت {invite_coin} الماس هدیه \n"
             f"\n"
-            f"👈یکی از زیرمجموعه های شما برای اولین بار {threshold} دریافت الماس (عضویت در کانال) انجام داد\n"
+            f"👈یکی از زیرمجموعهه های شما برای اولین بار {threshold} دریافت الماس (عضویت در کانال) انجام داد\n"
             f"\n"
             f"✅ {invite_coin} الماس بصورت هدیه به حساب شما اضافه شد\n"
             f"\n"
