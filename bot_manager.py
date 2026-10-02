@@ -280,36 +280,6 @@ def check_panel_expiry(user_id: int) -> bool:
 
     return False
 
-# ==================== بررسی انقضای هدیه اعتباری ====================
-def check_credit_gift_expiry(user_id: int) -> int:
-    """اگه هدیه اعتباری منقضی شده، credit_gift رو صفر کن و برگردون.
-    نکته: coins دست‌نخورده می‌مونه."""
-    from utils.helpers import now_ts
-    now = now_ts()
-    user = get_user(user_id)
-    if not user:
-        return 0
-
-    credit_gift = user.get("credit_gift", 0) or 0
-    credit_expire = user.get("credit_gift_expire", 0) or 0
-
-    if credit_gift <= 0 or credit_expire <= 0:
-        return 0
-
-    if credit_expire > now:
-        return 0
-
-    # منقضی شده — فقط credit_gift صفر می‌شه
-    lost = credit_gift
-    with db.conn() as c:
-        c.execute("""
-            UPDATE users SET
-                credit_gift = 0,
-                credit_gift_expire = 0
-            WHERE user_id = ?
-        """, (user_id,))
-    return lost
-
 # ==================== بررسی پاداش زیرمجموعه ====================
 async def check_referral_milestone(context, user_id: int):
     user = get_user(user_id)
