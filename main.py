@@ -93,6 +93,10 @@ async def on_message(update: Update, context):
     msg = update.message
     text = (msg.text or "").strip()
 
+    # 👈 فقط چت خصوصی
+    if update.effective_chat.type != "private":
+        return
+
     logger.info(f"📨 on_message: '{text}' from user {user_tg.id} ({user_tg.first_name})")
 
     if is_banned(user_tg.id):
@@ -291,8 +295,14 @@ def main():
     logger.info("Starting bot...")
     app = Application.builder().token(Config.BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", user.start))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
+    app.add_handler(CommandHandler(
+        "start", user.start,
+        filters=filters.ChatType.PRIVATE
+    ))
+    app.add_handler(MessageHandler(
+        filters.ChatType.PRIVATE & filters.ALL & ~filters.COMMAND,
+        on_message
+    ))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(ChatMemberHandler(track_chat, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(ChatJoinRequestHandler(on_join_request))
