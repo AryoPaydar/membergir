@@ -8,7 +8,6 @@ def start_text(first_name, user_id):
         f"به ربات خوش آمدید. از منوی زیر گزینه مورد نظر را انتخاب کنید."
     )
     text = get_setting("start_text", default)
-    # جایگزینی متغیرها
     text = text.replace("{first_name}", first_name or "")
     text = text.replace("{user_id}", str(user_id))
     return text
@@ -19,40 +18,40 @@ def account_text(user: dict):
     from utils.helpers import jalali_now, now_ts
     import jdatetime
     from datetime import datetime
-    
+
     first_name = user.get("first_name") or "کاربر"
     username = user.get("username")
     username_display = f"@{username}" if username else "ندارد"
     user_id = user["user_id"]
-    
+
     try:
         dt = datetime.strptime(str(user["join_date"])[:19], "%Y-%m-%d %H:%M:%S")
         join_date_jalali = jdatetime.date.fromgregorian(date=dt.date()).strftime("%Y/%m/%d")
     except Exception:
         join_date_jalali = str(user.get("join_date", ""))[:10]
-    
+
     panel = user.get("panel", "عادی")
     is_verified = bool(user.get("phone"))
     verify_status = "تایید شده ✅" if is_verified else "تایید نشده ❌"
     warnings = user.get("warnings", 0)
     max_warn = Config.MAX_WARNINGS
-    
+
     today, _ = jalali_now()
     today_earned = user.get("today_earned", 0) if user.get("today_date") == today else 0
     total_earned = user.get("total_earned", 0)
     total_spent = user.get("total_spent", 0)
-    
+
     with db.conn() as c:
         gift_row = c.execute("""
             SELECT COALESCE(SUM(amount), 0) as total FROM transactions
             WHERE to_id = ? AND type = 'admin_gift'
         """, (user_id,)).fetchone()
         admin_gift = gift_row["total"] if gift_row else 0
-        
+
         ref_total = c.execute(
             "SELECT COUNT(*) c FROM users WHERE referrer_id = ?", (user_id,)
         ).fetchone()["c"]
-        
+
         today_jalali = today
         ref_today = 0
         refs = c.execute(
@@ -66,33 +65,35 @@ def account_text(user: dict):
                     ref_today += 1
             except Exception:
                 pass
-        
+
         ref_verified = c.execute("""
             SELECT COUNT(*) c FROM users
             WHERE referrer_id = ? AND ads_joined >= 3
         """, (user_id,)).fetchone()["c"]
-        
+
         commission_row = c.execute("""
             SELECT COALESCE(SUM(amount), 0) as total FROM transactions
             WHERE to_id = ? AND type IN ('referral', 'referral_commission')
         """, (user_id,)).fetchone()
         inv_commission = commission_row["total"] if commission_row else 0
-    
-    hourly_earned = user.get("hourly_earned", 0)
-    last_hourly = user.get("last_hourly", 0)
+
+    # محاسبه زمان باقی‌مانده هدیه اعتباری
+    credit_gift = user.get("credit_gift", 0) or 0
+    credit_expire = user.get("credit_gift_expire", 0) or 0
     now = now_ts()
-    cooldown = Config.HOURLY_GIFT_COOLDOWN
-    next_hourly = last_hourly + cooldown
-    if now < next_hourly:
-        remaining = next_hourly - now
+
+    if credit_gift > 0 and credit_expire > now:
+        remaining = credit_expire - now
         minutes = remaining // 60
         seconds = remaining % 60
-        time_left = f"{minutes} دقیقه و {seconds} ثانیه"
+        credit_time_left = f"{minutes} دقیقه و {seconds} ثانیه"
+    elif credit_gift > 0 and credit_expire <= now:
+        credit_time_left = "منقضی شده ❌"
     else:
-        time_left = "آماده دریافت ✅"
-    
+        credit_time_left = "آماده دریافت ✅"
+
     coins = user.get("coins", 0)
-    
+
     text = (
         f"🔰 نام کاربری : <b>{first_name}</b>\n"
         f"🆔 یوزرنیم : {username_display}\n"
@@ -106,8 +107,8 @@ def account_text(user: dict):
         f"📈 موجودی کسب شده در امروز : {today_earned:,}\n"
         f"📉 مجموع موجودی مصرفی : {total_spent:,}\n"
         f"🎁 هدیه مدیریت : {admin_gift:,}\n"
-        f"🎊 هدیه اعتباری : {hourly_earned:,}\n"
-        f"⏳ زمان باقی مانده هدیه اعتباری : {time_left}\n"
+        f"🎊 هدیه اعتباری : {credit_gift:,}\n"
+        f"⏳ زمان باقی مانده هدیه اعتباری : {credit_time_left}\n"
         f"\n"
         f"💳 انتقالات\n"
         f"📥 دریافتی : {user.get('received_coins', 0):,}\n"
@@ -121,7 +122,7 @@ def account_text(user: dict):
         f"\n"
         f"💰 موجودی : <b>{coins:,}</b>"
     )
-    
+
     return text
 
 
