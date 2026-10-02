@@ -87,10 +87,10 @@ def account_text(user: dict):
         minutes = remaining // 60
         seconds = remaining % 60
         credit_time_left = f"{minutes} دقیقه و {seconds} ثانیه"
-    elif credit_gift > 0 and credit_expire <= now:
-        credit_time_left = "منقضی شده ❌"
+        credit_display = credit_gift
     else:
         credit_time_left = "آماده دریافت ✅"
+        credit_display = 0
 
     coins = user.get("coins", 0)
 
@@ -107,7 +107,7 @@ def account_text(user: dict):
         f"📈 موجودی کسب شده در امروز : {today_earned:,}\n"
         f"📉 مجموع موجودی مصرفی : {total_spent:,}\n"
         f"🎁 هدیه مدیریت : {admin_gift:,}\n"
-        f"🎊 هدیه اعتباری : {credit_gift:,}\n"
+        f"🎊 هدیه اعتباری : {credit_display:,}\n"
         f"⏳ زمان باقی مانده هدیه اعتباری : {credit_time_left}\n"
         f"\n"
         f"💳 انتقالات\n"
