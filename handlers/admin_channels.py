@@ -88,18 +88,19 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             )
             return True
 
-        # استخراج chat_id
         chat_id = None
         try:
-            if channel.startswith("+") or channel.startswith("joinchat"):
-                # لینک خصوصی — نمی‌تونیم مستقیم chat_id بگیریم
-                # ولی می‌تونیم از طریق chat_id یه پیام فوروارد شده یا راه دیگه
-                # اینجا فقط ذخیره می‌کنیم و کاربر با یوزرنیم چک می‌شه
-                pass
-            else:
+            if not (channel.startswith("+") or channel.startswith("joinchat")):
                 chat = await context.bot.get_chat(f"@{channel.lstrip('@')}")
                 chat_id = chat.id
         except Exception:
+            pass
+
+        # اگه لینک خصوصی بود، از bot_chats بر اساس اسم یا یوزرنیم پیدا کن
+        if chat_id is None and (channel.startswith("+") or channel.startswith("joinchat")):
+            # نمی‌تونیم از لینک خصوصی chat_id بگیریم
+            # ولی اگه ربات قبلاً به کانال اضافه شده، chat_id توی bot_chats هست
+            # اینجا فقط ذخیره می‌کنیم و کاربر با pending_joins چک می‌شه
             pass
 
         with db.conn() as c:
