@@ -272,27 +272,18 @@ class Database:
                     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             # === کانال تبلیغات (برای جوین اجباری) ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS ads_channels_tg (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     channel     TEXT NOT NULL,
                     chat_id     INTEGER,
+                    title       TEXT,
                     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
-            # === درخواست‌های عضویت (برای لینک‌های خصوصی) ===
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS pending_joins (
-                    user_id     INTEGER NOT NULL,
-                    chat_id     INTEGER NOT NULL,
-                    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (user_id, chat_id)
-                )
-            """)
-            
             # === کانال ممنوعه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS banned_channels (
@@ -346,4 +337,3 @@ class Database:
 
 
 db = Database()
-
