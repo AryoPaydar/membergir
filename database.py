@@ -184,6 +184,18 @@ class Database:
                 )
             """)
 
+            # === هدیه اعتباری ===
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS credit_gifts (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id     INTEGER NOT NULL,
+                    amount      INTEGER NOT NULL,
+                    expire_at   INTEGER NOT NULL,
+                    used        INTEGER DEFAULT 0,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # === فروشگاه ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS shop_items (
