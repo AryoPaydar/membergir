@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
@@ -297,46 +298,53 @@ async def on_callback(update: Update, context):
         pass
 
 
-async def check_all_credit_gifts(context):
-    """هر دقیقه چک انقضای همه هدیه‌های اعتباری"""
+# ==================== حلقه پس‌زمینه چک انقضای هدیه اعتباری ====================
+_bot_instance = None
+
+
+async def credit_gift_loop():
+    """هر 60 ثانیه هدیه‌های اعتباری منقضی‌شده رو چک کن"""
     from utils.helpers import now_ts
-    now = now_ts()
-
-    with db.conn() as c:
-        expired = c.execute("""
-            SELECT user_id, credit_gift FROM users
-            WHERE credit_gift > 0 AND credit_gift_expire > 0 AND credit_gift_expire <= ?
-        """, (now,)).fetchall()
-        expired_users = [dict(r) for r in expired]
-
-    if not expired_users:
-        return
-
-    logger.info(f"⏰ Found {len(expired_users)} expired credit gifts")
-
-    for row in expired_users:
-        uid = row["user_id"]
-        lost = row["credit_gift"]
-
-        with db.conn() as c:
-            c.execute("""
-                UPDATE users SET
-                    coins = MAX(0, coins - ?),
-                    credit_gift = 0,
-                    credit_gift_expire = 0
-                WHERE user_id = ?
-            """, (lost, uid))
-
-        logger.info(f"⏰ Credit gift expired for {uid}, lost={lost}")
-
+    logger.info("🔁 credit_gift_loop started")
+    while True:
         try:
-            await context.bot.send_message(
-                uid,
-                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
-                f"💸 مقدار هدیه از دست رفته : {lost:,}"
-            )
+            now = now_ts()
+            with db.conn() as c:
+                expired = c.execute("""
+                    SELECT user_id, credit_gift FROM users
+                    WHERE credit_gift > 0 AND credit_gift_expire > 0 AND credit_gift_expire <= ?
+                """, (now,)).fetchall()
+                expired_users = [dict(r) for r in expired]
+
+            for row in expired_users:
+                uid = row["user_id"]
+                lost = row["credit_gift"]
+
+                with db.conn() as c:
+                    c.execute("""
+                        UPDATE users SET
+                            coins = MAX(0, coins - ?),
+                            credit_gift = 0,
+                            credit_gift_expire = 0
+                        WHERE user_id = ?
+                    """, (lost, uid))
+
+                logger.info(f"⏰ Credit gift expired for {uid}, lost={lost}")
+
+                if _bot_instance:
+                    try:
+                        await _bot_instance.send_message(
+                            uid,
+                            f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
+                            f"💸 مقدار هدیه از دست رفته : {lost:,}"
+                        )
+                    except Exception as e:
+                        logger.error(f"credit gift msg error to {uid}: {e}")
+
         except Exception as e:
-            logger.error(f"credit gift msg error to {uid}: {e}")
+            logger.error(f"credit_gift_loop error: {e}")
+
+        await asyncio.sleep(60)
 
 
 async def on_join_request(update: Update, context):
@@ -370,6 +378,8 @@ async def on_error(update: object, context):
 
 
 def main():
+    global _bot_instance
+
     logger.info("Starting bot...")
     app = Application.builder().token(Config.BOT_TOKEN).build()
 
@@ -386,12 +396,13 @@ def main():
     app.add_handler(ChatJoinRequestHandler(on_join_request))
     app.add_error_handler(on_error)
 
-    # JobQueue
-    if app.job_queue:
-        app.job_queue.run_repeating(check_all_credit_gifts, interval=60, first=10)
-        logger.info("✅ JobQueue for credit gifts started")
-    else:
-        logger.warning("⚠️ JobQueue is None - install python-telegram-bot[job-queue]")
+    _bot_instance = app.bot
+
+    async def post_init(application):
+        asyncio.create_task(credit_gift_loop())
+        logger.info("✅ credit_gift_loop task created")
+
+    app.post_init = post_init
 
     logger.info("Bot is running.")
     app.run_polling(
