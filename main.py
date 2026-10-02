@@ -8,7 +8,7 @@ from config import Config
 from database import db
 from bot_manager import (
     get_user, create_user, is_admin, is_banned, is_bot_on, get_setting,
-    set_user_state, check_credit_gift_expiry
+    set_user_state
 )
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
@@ -111,17 +111,6 @@ async def on_message(update: Update, context):
     if not get_user(user_tg.id):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
         logger.info(f"✅ Created user {user_tg.id}")
-
-    # 👈 چک انقضای هدیه اعتباری
-    lost = check_credit_gift_expiry(user_tg.id)
-    if lost > 0:
-        try:
-            await msg.reply_text(
-                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
-                f"💸 مقدار هدیه از دست رفته : {lost:,}"
-            )
-        except Exception:
-            pass
 
     # 👈 چک جوین اجباری برای کاربران عادی (به جز /start)
     if not is_admin(user_tg.id) and not text.startswith("/start"):
@@ -237,18 +226,6 @@ async def on_callback(update: Update, context):
         await q.answer("ربات خاموش است.", show_alert=True)
         return
 
-    # 👈 چک انقضای هدیه اعتباری
-    lost = check_credit_gift_expiry(q.from_user.id)
-    if lost > 0:
-        try:
-            await context.bot.send_message(
-                q.from_user.id,
-                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
-                f"💸 مقدار هدیه از دست رفته : {lost:,}"
-            )
-        except Exception:
-            pass
-
     # 👈 چک جوین اجباری برای کاربران عادی (به جز callback عضویت)
     if not is_admin(q.from_user.id) and q.data not in ("check_join",):
         from handlers.user import check_force_join
@@ -310,6 +287,40 @@ async def on_join_request(update: Update, context):
     logger.info(f"✅ Join request از {user_id} برای chat_id={chat_id} ثبت شد")
 
 
+async def check_all_credit_gifts(context):
+    """هر دقیقه چک کن که هدیه اعتباری منقضی شده یا نه"""
+    from utils.helpers import now_ts
+    now = now_ts()
+
+    with db.conn() as c:
+        expired = c.execute("""
+            SELECT user_id, credit_gift FROM users
+            WHERE credit_gift > 0 AND credit_gift_expire > 0 AND credit_gift_expire <= ?
+        """, (now,)).fetchall()
+        expired_users = [dict(r) for r in expired]
+
+    for row in expired_users:
+        uid = row["user_id"]
+        lost = row["credit_gift"]
+
+        with db.conn() as c:
+            c.execute("""
+                UPDATE users SET
+                    credit_gift = 0,
+                    credit_gift_expire = 0
+                WHERE user_id = ?
+            """, (uid,))
+
+        try:
+            await context.bot.send_message(
+                uid,
+                f"⏰ هدیه اعتباری شما منقضی شد!\n\n"
+                f"💸 مقدار هدیه از دست رفته : {lost:,}"
+            )
+        except Exception:
+            pass
+
+
 async def on_error(update: object, context):
     logger.error(f"Exception: {context.error}", exc_info=context.error)
 
@@ -330,6 +341,11 @@ def main():
     app.add_handler(ChatMemberHandler(track_chat, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(ChatJoinRequestHandler(on_join_request))
     app.add_error_handler(on_error)
+
+    # JobQueue برای چک انقضای هدیه اعتباری
+    if app.job_queue:
+        app.job_queue.run_repeating(check_all_credit_gifts, interval=60, first=10)
+        logger.info("✅ JobQueue for credit gifts started")
 
     logger.info("Bot is running.")
     app.run_polling(
