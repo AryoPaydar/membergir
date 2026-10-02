@@ -107,10 +107,11 @@ async def on_message(update: Update, context):
         create_user(user_tg.id, user_tg.first_name or "", user_tg.username or "")
         logger.info(f"✅ Created user {user_tg.id}")
 
-    # 👈 چک جوین اجباری برای کاربران عادی
+    # 👈 چک جوین اجباری برای کاربران عادی (به جز /start)
     if not is_admin(user_tg.id) and not text.startswith("/start"):
         from handlers.user import check_force_join
         if not await check_force_join(context, user_tg.id):
+            logger.info(f"🔐 User {user_tg.id} not joined force channels")
             return
 
     # ۱. State کاربر
@@ -255,6 +256,33 @@ async def on_callback(update: Update, context):
         pass
 
 
+async def on_join_request(update: Update, context):
+    """وقتی کاربر درخواست عضویت در کانال خصوصی می‌ده"""
+    req = update.chat_join_request
+    if not req:
+        return
+
+    user_id = req.from_user.id
+    chat_id = req.chat.id
+
+    with db.conn() as c:
+        c.execute("""
+            INSERT OR IGNORE INTO pending_joins (user_id, chat_id)
+            VALUES (?, ?)
+        """, (user_id, chat_id))
+        c.execute("""
+            UPDATE ads_channels_tg SET chat_id = ?
+            WHERE chat_id IS NULL
+        """, (chat_id,))
+
+    try:
+        await context.bot.approve_chat_join_request(chat_id, user_id)
+    except Exception:
+        pass
+
+    logger.info(f"✅ Join request از {user_id} برای chat_id={chat_id} ثبت شد")
+
+
 async def on_error(update: object, context):
     logger.error(f"Exception: {context.error}", exc_info=context.error)
 
@@ -267,12 +295,15 @@ def main():
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(ChatMemberHandler(track_chat, ChatMemberHandler.MY_CHAT_MEMBER))
+    app.add_handler(ChatJoinRequestHandler(on_join_request))
     app.add_error_handler(on_error)
 
     logger.info("Bot is running.")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES + ["chat_join_request"],
+        drop_pending_updates=True,
+    )
 
 
 if __name__ == "__main__":
     main()
-
