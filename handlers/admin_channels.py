@@ -79,6 +79,52 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
 
+    # ==== تنظیم کانال تبلیغات ====
+    if state == "ach_ads_add":
+        valid, channel = _is_valid_channel_id(text)
+        if not valid:
+            await update.message.reply_text(
+                "❌ آیدی نامعتبر.\n\nفرمت‌های مجاز:\n@dorv\nhttps://t.me/+RF3WEHVqJAYwNTM0"
+            )
+            return True
+
+        chat_id = None
+        title = channel
+
+        try:
+            if not (channel.startswith("+") or channel.startswith("joinchat")):
+                chat = await context.bot.get_chat(f"@{channel.lstrip('@')}")
+                chat_id = chat.id
+                title = chat.title or channel
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ خطا در دریافت اطلاعات کانال:\n{e}\n\n"
+                "⚠️ مطمئن شو ربات ادمین کانال/گروهه و آیدی درسته."
+            )
+            return True
+
+        with db.conn() as c:
+            existing = c.execute(
+                "SELECT 1 FROM ads_channels_tg WHERE channel = ? OR (chat_id IS NOT NULL AND chat_id = ?)",
+                (channel, chat_id)
+            ).fetchone()
+            if existing:
+                await update.message.reply_text("❌ این کانال قبلاً اضافه شده است.")
+                set_user_state(user_id, "none")
+                return True
+
+            c.execute(
+                "INSERT INTO ads_channels_tg (channel, chat_id, title) VALUES (?, ?, ?)",
+                (channel, chat_id, title)
+            )
+
+        set_user_state(user_id, "none")
+        await update.message.reply_text(
+            f"✅ کانال «{title}» با موفقیت به کانال های تبلیغاتی اضافه شد",
+            reply_markup=admin_panel()
+        )
+        return True
+
     # ==== تنظیم کانال کد هدیه ====
     if state == "ach_set_gift":
         channel = text.strip().lstrip("@")
@@ -190,74 +236,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if data == "ach_ads_add_btn":
         await q.answer()
-        with db.conn() as c:
-            chats = c.execute("""
-                SELECT chat_id, title, username, chat_type
-                FROM bot_chats
-                WHERE chat_type IN ('channel', 'supergroup', 'group')
-                ORDER BY added_at DESC
-            """).fetchall()
-
-        if not chats:
-            try:
-                await q.message.edit_text(
-                    "❌ هنوز ربات توی هیچ کانال یا گروهی ادمین نشده.\n\n"
-                    "اول ربات رو توی کانال/گروه ادمین کن، بعد دوباره تلاش کن.",
-                    reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]])
-                )
-            except Exception:
-                pass
-            return True
-
-        rows = []
-        for ch in chats:
-            name = ch["title"] or ch["username"] or str(ch["chat_id"])
-            rows.append([(f"📢 {name[:40]}", f"ach_ads_pick:{ch['chat_id']}")])
-        rows.append([("🔙 بازگشت", "ach_ads_menu")])
-
+        set_user_state(q.from_user.id, "ach_ads_add")
         try:
             await q.message.edit_text(
-                "🔗 کانال یا گروه مورد نظر رو انتخاب کنید:\n\n"
+                "آیدی کانال تبلیغاتی مد نظر خود را وارد نمایید\n\n"
+                "فرمت‌های مجاز:\n@dorv\nhttps://t.me/+RF3WEHVqJAYwNTM0\n\n"
                 "⚠️ ربات باید ادمین کانال/گروه باشه",
-                reply_markup=inline(rows)
-            )
-        except Exception:
-            pass
-        return True
-
-    if data.startswith("ach_ads_pick:"):
-        await q.answer()
-        chat_id = int(data.split(":")[1])
-
-        with db.conn() as c:
-            ch = c.execute(
-                "SELECT chat_id, title, username FROM bot_chats WHERE chat_id = ?",
-                (chat_id,)
-            ).fetchone()
-
-        if not ch:
-            await q.answer("❌ کانال یافت نشد.", show_alert=True)
-            return True
-
-        channel_display = ch["username"] or str(chat_id)
-        title = ch["title"] or channel_display
-
-        with db.conn() as c:
-            existing = c.execute(
-                "SELECT 1 FROM ads_channels_tg WHERE chat_id = ?", (chat_id,)
-            ).fetchone()
-            if existing:
-                await q.answer("❌ این کانال قبلاً اضافه شده است.", show_alert=True)
-                return True
-
-            c.execute(
-                "INSERT INTO ads_channels_tg (channel, chat_id, title) VALUES (?, ?, ?)",
-                (channel_display, chat_id, title)
-            )
-
-        try:
-            await q.message.edit_text(
-                f"✅ کانال «{title}» با موفقیت به کانال های تبلیغاتی اضافه شد",
                 reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]])
             )
         except Exception:
