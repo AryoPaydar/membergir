@@ -81,10 +81,61 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     # ==== تنظیم کانال تبلیغات ====
     if state == "ach_ads_add":
+        # اگه آیدی عددی بود
+        if text.lstrip("-").isdigit():
+            chat_id = int(text)
+            title = str(chat_id)
+
+            with db.conn() as c:
+                ch = c.execute(
+                    "SELECT title FROM bot_chats WHERE chat_id = ?",
+                    (chat_id,)
+                ).fetchone()
+                if ch:
+                    title = ch["title"] or title
+
+                existing = c.execute(
+                    "SELECT 1 FROM ads_channels_tg WHERE chat_id = ?",
+                    (chat_id,)
+                ).fetchone()
+                if existing:
+                    await update.message.reply_text("❌ این کانال قبلاً اضافه شده است.")
+                    set_user_state(user_id, "none")
+                    return True
+
+                c.execute(
+                    "INSERT INTO ads_channels_tg (channel, chat_id, title) VALUES (?, ?, ?)",
+                    (str(chat_id), chat_id, title)
+                )
+
+            set_user_state(user_id, "none")
+            await update.message.reply_text(
+                f"✅ کانال «{title}» با موفقیت به کانال های تبلیغاتی اضافه شد",
+                reply_markup=admin_panel()
+            )
+            return True
+
+        # اگه یوزرنیم بود
         valid, channel = _is_valid_channel_id(text)
         if not valid:
             await update.message.reply_text(
-                "❌ آیدی نامعتبر.\n\nفرمت‌های مجاز:\n@dorv\nhttps://t.me/+RF3WEHVqJAYwNTM0"
+                "❌ آیدی نامعتبر.\n\n"
+                "فرمت‌های مجاز:\n"
+                "• یوزرنیم: `@channel_username`\n"
+                "• آیدی عددی: `-1001234567890`\n\n"
+                "⚠️ لینک دعوت (`+`) قابل قبول نیست.",
+                parse_mode="Markdown"
+            )
+            return True
+
+        if channel.startswith("+") or channel.startswith("joinchat"):
+            await update.message.reply_text(
+                "❌ لینک دعوت (`+`) قابل قبول نیست.\n\n"
+                "👈 لطفاً به یکی از این دو صورت وارد کن:\n"
+                "1. یوزرنیم کانال: `@channel_username`\n"
+                "2. آیدی عددی کانال: `-1001234567890`\n\n"
+                "📌 برای پیدا کردن آیدی عددی: یه پیام از کانال رو برای ربات @userinfobot فوروارد کن",
+                parse_mode="Markdown"
             )
             return True
 
@@ -92,10 +143,9 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         title = channel
 
         try:
-            if not (channel.startswith("+") or channel.startswith("joinchat")):
-                chat = await context.bot.get_chat(f"@{channel.lstrip('@')}")
-                chat_id = chat.id
-                title = chat.title or channel
+            chat = await context.bot.get_chat(f"@{channel.lstrip('@')}")
+            chat_id = chat.id
+            title = chat.title or channel
         except Exception as e:
             await update.message.reply_text(
                 f"❌ خطا در دریافت اطلاعات کانال:\n{e}\n\n"
@@ -240,8 +290,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             await q.message.edit_text(
                 "آیدی کانال تبلیغاتی مد نظر خود را وارد نمایید\n\n"
-                "فرمت‌های مجاز:\n@dorv\nhttps://t.me/+RF3WEHVqJAYwNTM0\n\n"
+                "فرمت‌های مجاز:\n"
+                "• یوزرنیم: `@channel_username`\n"
+                "• آیدی عددی: `-1001234567890`\n\n"
+                "⚠️ لینک دعوت (`+`) قابل قبول نیست\n"
                 "⚠️ ربات باید ادمین کانال/گروه باشه",
+                parse_mode="Markdown",
                 reply_markup=inline([[("🔙 بازگشت", "ach_ads_menu")]])
             )
         except Exception:
