@@ -36,6 +36,8 @@ class Database:
                     panel_days      INTEGER DEFAULT 0,
                     panel_start     DATE,
                     panel_expire    TEXT,
+                    credit_gift     INTEGER DEFAULT 0,
+                    credit_gift_expire INTEGER DEFAULT 0,
                     warnings        INTEGER DEFAULT 0,
                     banned          INTEGER DEFAULT 0,
                     referrer_id     INTEGER,
@@ -71,6 +73,8 @@ class Database:
                 "last_hourly": "INTEGER DEFAULT 0",
                 "hourly_earned": "INTEGER DEFAULT 0",
                 "panel_expire": "TEXT",
+                "credit_gift": "INTEGER DEFAULT 0",
+                "credit_gift_expire": "INTEGER DEFAULT 0",
             }
             for col, col_type in new_columns.items():
                 if col not in existing_columns:
@@ -148,6 +152,7 @@ class Database:
                     type                TEXT DEFAULT 'global',
                     target_user_id      INTEGER,
                     created_by          INTEGER,
+                    expire_minutes      INTEGER DEFAULT 0,
                     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     is_active           INTEGER DEFAULT 1
                 )
@@ -168,10 +173,17 @@ class Database:
                         type                TEXT DEFAULT 'global',
                         target_user_id      INTEGER,
                         created_by          INTEGER,
+                        expire_minutes      INTEGER DEFAULT 0,
                         created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         is_active           INTEGER DEFAULT 1
                     )
                 """)
+
+            if "expire_minutes" not in gift_cols:
+                try:
+                    c.execute("ALTER TABLE gift_codes ADD COLUMN expire_minutes INTEGER DEFAULT 0")
+                except Exception:
+                    pass
 
             c.execute("""
                 CREATE TABLE IF NOT EXISTS gift_code_users (
@@ -340,6 +352,7 @@ class Database:
             c.execute("CREATE INDEX IF NOT EXISTS idx_support_status ON support_messages(status)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_ads_position ON ads_channels(position)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_ads_last_shown ON ads_channels(last_shown_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_credit_user ON credit_gifts(user_id)")
 
             # === ادمین اصلی ===
             c.execute(
