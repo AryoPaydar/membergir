@@ -18,17 +18,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = update.message
     args = context.args
-    
+
     if is_banned(user.id):
         await msg.reply_text("⛔️ شما از ربات مسدود شده‌اید.")
         return
-    
+
     from bot_manager import is_bot_on
     if not is_bot_on() and not is_admin(user.id):
         text = get_setting("power_text", "ربات در حال حاضر خاموش است.")
         await msg.reply_text(text)
         return
-    
+
     db_user = get_user(user.id)
     referrer_id = None
     if not db_user and args:
@@ -38,7 +38,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 referrer_id = ref
         except (ValueError, IndexError):
             pass
-    
+
     if not db_user:
         db_user = create_user(user.id, user.first_name or "", user.username or "", referrer_id)
         if referrer_id:
@@ -46,7 +46,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         update_user(user.id, first_name=user.first_name or "", username=user.username or "")
         update_user(user.id, state="none")
-        
+
         today, _ = jalali_now()
         if db_user.get("today_date") != today:
             with db.conn() as c:
@@ -55,14 +55,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     SET today_earned = 0, referral_today = 0, today_date = ?
                     WHERE user_id = ?
                 """, (today, user.id))
-        
+
         if check_panel_expiry(user.id):
             await msg.reply_text(
                 "⏳ اعتبار پنل شما به پایان رسید و به پنل <b>عادی</b> بازگشتید. در صورت تمایل میتوانید دوباره پنل خود را ارتقا دهید.",
                 parse_mode="HTML"
             )
-    
-    
+
     await msg.reply_text(
         start_text(user.first_name, user.id),
         parse_mode="HTML",
@@ -75,12 +74,10 @@ async def check_force_join(context, user_id):
 
     missing = []
 
-    # کانال‌های force
     for ch in (Config.FORCE_CHANNEL_1, Config.FORCE_CHANNEL_2):
         if ch and not await check_membership(context, ch, user_id):
             missing.append(ch)
 
-    # کانال‌های تبلیغاتی
     with db.conn() as c:
         ads_list = c.execute("SELECT channel, chat_id FROM ads_channels_tg").fetchall()
 
@@ -88,26 +85,8 @@ async def check_force_join(context, user_id):
         ch = row["channel"]
         cid = row["chat_id"]
 
-        # اگه لینک خصوصیه
-        if ch.startswith("+") or ch.startswith("joinchat"):
-            # چک pending_joins
-            if cid:
-                with db.conn() as c2:
-                    joined = c2.execute(
-                        "SELECT 1 FROM pending_joins WHERE user_id = ? AND chat_id = ?",
-                        (user_id, cid)
-                    ).fetchone()
-                # اگه ربات ادمین کاناله ولی کاربر pending نداره → missing
-                if not joined:
-                    # ولی فقط وقتی که ربات بتونه چک کنه (chat_id داریم)
-                    missing.append(ch)
-            else:
-                # chat_id نداریم → نمی‌تونیم چک کنیم → رد کن
-                pass
-        else:
-            # لینک عمومی — با یوزرنیم چک کن
-            if not await check_membership(context, ch, user_id, cid):
-                missing.append(ch)
+        if not await check_membership(context, ch, user_id, cid):
+            missing.append(ch)
 
     if not missing:
         return True
@@ -133,7 +112,7 @@ async def handle_referral_join(context, referrer_id, new_user_id):
     referrer = get_user(referrer_id)
     if not referrer:
         return
-    
+
     panel_cfg = get_panel_config(referrer.get("panel", "عادی"))
     invite_coin = panel_cfg["invite_coin"]
     commission_percent = {
@@ -141,7 +120,7 @@ async def handle_referral_join(context, referrer_id, new_user_id):
         "حرفه ای": 10,
         "ویژه": 15,
     }.get(referrer.get("panel", "عادی"), 5)
-    
+
     try:
         await context.bot.send_message(
             referrer_id,
@@ -156,7 +135,7 @@ async def handle_referral_join(context, referrer_id, new_user_id):
         )
     except Exception:
         pass
-    
+
     if get_setting("referral_report", "on") == "on":
         try:
             await context.bot.send_message(
@@ -203,7 +182,7 @@ async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         await update.message.reply_text("لطفاً /start را بزنید.")
         return
-    
+
     text = (
         "<b>به بخش دریافت الماس رایگان خوش آمدید🌹</b>\n"
         "\n"
@@ -219,14 +198,14 @@ async def daily_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\n"
         "🫂 همچنین از طریق زیر مجموعه گیری هم میتونید تا بینهایت الماس رایگان کسب کنید.\n"
     )
-    
+
     ads_channel = Config.ADS_CHANNEL or ""
-    
+
     keyboard = inline([
         [("💎 الماس روزانه", "daily_gift_claim") , ("📢 عضویت در کانال", f"https://t.me/{ads_channel}")],
         [("🛍 خرید الماس", "go_to_shop")],
-        ]) 
-    
+        ])
+
     await update.message.reply_text(
         text,
         parse_mode="HTML",
@@ -241,32 +220,32 @@ async def daily_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         await q.answer("❌ لطفاً ابتدا /start را بزنید.", show_alert=True)
         return
-    
+
     now = now_ts()
     cooldown = Config.DAILY_GIFT_COOLDOWN
     last_daily = user.get("last_daily") or 0
     next_time = last_daily + cooldown
-    
+
     if now < next_time:
         remaining = next_time - now
         hours = remaining // 3600
         minutes = (remaining % 3600) // 60
         time_str = f"{hours:02d}:{minutes:02d}"
-        
+
         await q.answer(
             f"⏳ شما قبلاً هدیه امروز را دریافت کرده‌اید.\n"
             f"🕐 زمان باقی‌مانده: {time_str}",
             show_alert=True
         )
         return
-    
+
     amount = get_daily_gift(user)
     add_coins(user_id, amount, "daily", "هدیه روزانه")
     update_user(user_id, last_daily=now)
-    
+
     new_user = get_user(user_id)
     new_balance = new_user.get("coins", 0)
-    
+
     await q.answer(
         f"🎉 تبریک!\n"
         f"💰 {amount} سکه به حساب شما اضافه شد.\n"
@@ -282,12 +261,12 @@ async def hourly_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         await q.answer("❌ لطفاً ابتدا /start را بزنید.", show_alert=True)
         return
-    
+
     now = now_ts()
     cooldown = Config.HOURLY_GIFT_COOLDOWN
     last_hourly = user.get("last_hourly") or 0
     next_time = last_hourly + cooldown
-    
+
     if now < next_time:
         remaining = next_time - now
         minutes = remaining // 60
@@ -297,7 +276,7 @@ async def hourly_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
             show_alert=True
         )
         return
-    
+
     amount = Config.HOURLY_GIFT_AMOUNT
     add_coins(user_id, amount, "hourly_gift", "هدیه ساعتی")
     update_user(
@@ -305,10 +284,10 @@ async def hourly_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_hourly=now,
         hourly_earned=(user.get("hourly_earned", 0) + amount)
     )
-    
+
     new_user = get_user(user_id)
     new_balance = new_user.get("coins", 0)
-    
+
     await q.answer(
         f"🎉 تبریک!\n"
         f"💰 {amount} سکه هدیه ساعتی دریافت کردید.\n"
@@ -320,7 +299,7 @@ async def hourly_gift_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def go_to_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    
+
     from handlers import shop
     await shop.shop_menu_from_callback(update, context)
 
@@ -415,7 +394,7 @@ async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "لطفا از دکمه های زیر سوال خود را پیدا کنید.\n"
         "همچنین میتوانید در صورت داشتن هر گونه سوال با مدیریت در ارتباط باشید."
     )
-    
+
     keyboard = inline([
         [("💎 نحوه جمع آوری الماس", "help_collect")],
         [("🛍 نحوه استفاده از فروشگاه", "help_shop")],
@@ -425,7 +404,7 @@ async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [("🏦 نحوه انتقال الماس", "help_transfer")],
         [("🔙 بازگشت به منوی اصلی", "help_back")],
     ])
-    
+
     await update.message.reply_text(text, reply_markup=keyboard)
 
 
@@ -573,12 +552,12 @@ async def contact_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "در صورتی که انتقاد یا پیشنهادی داشتید میتوانید از 📧 ارسال پیام استفاده کنید\n"
         "برای مشاهده پیام مدیریت نیز میتوانید از 📩 صندوق دریافت استفاده نمایید"
     )
-    
+
     keyboard = inline([
         [("📧 ارسال پیام", "support_send"), ("📩 صندوق دریافت", "support_inbox")],
         [("🔙 منوی اصلی", "support_home")],
     ])
-    
+
     await update.message.reply_text(text, reply_markup=keyboard)
 
 
@@ -613,7 +592,7 @@ async def support_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     user_id = q.from_user.id
-    
+
     with db.conn() as c:
         msgs = c.execute("""
             SELECT * FROM support_messages
@@ -621,14 +600,14 @@ async def support_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ORDER BY id DESC
             LIMIT 20
         """, (user_id,)).fetchall()
-    
+
     if not msgs:
         await q.message.reply_text(
             "📭 هنوز پیامی از طرف مدیریت دریافت نکرده‌اید.",
             reply_markup=inline([[("🔙 بازگشت", "support_home")]])
         )
         return
-    
+
     text = "📩 <b>صندوق دریافت پیام‌های شما:</b>\n\n"
     for m in msgs:
         text += (
@@ -638,7 +617,7 @@ async def support_inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if m.get("reply"):
             text += f"\n💬 پاسخ مدیریت:\n{m['reply']}\n"
         text += "————————————\n"
-    
+
     await q.message.reply_text(
         text,
         parse_mode="HTML",
@@ -656,17 +635,17 @@ async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\n"
         "البته بچه های محک هم فراموش نکنین"
     )
-    
+
     text = get_setting("support_text", default_text)
     link_bot = get_setting("support_link_bot", "https://reymit.ir/bots_hive")
     link_mahak = get_setting("support_link_mahak", "https://mahak-charity.org/online-payment/")
-    
+
     keyboard = inline([
         [("💞 حمایت مالی از ربات", link_bot)],
         [("🤝 حمایت مالی در محک", link_mahak)],
         [("🔙 بازگشت به منوی اصلی", "support_back")],
     ])
-    
+
     await update.message.reply_text(text, reply_markup=keyboard)
 
 
@@ -689,13 +668,13 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     user_id = update.effective_user.id
     state, data = get_user_state(user_id)
     text = (update.message.text or "").strip()
-    
+
     if not state or state == "none":
         from handlers import gift
         if await gift.handle_state(update, context):
             return True
         return False
-    
+
     if state == "support_msg_input":
         if text == "🔙 انصراف":
             set_user_state(user_id, "none")
@@ -704,23 +683,23 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 reply_markup=main_menu(is_admin(user_id))
             )
             return True
-        
+
         with db.conn() as c:
             cur = c.execute("""
                 INSERT INTO support_messages (user_id, message)
                 VALUES (?, ?)
             """, (user_id, text))
             msg_id = cur.lastrowid
-        
+
         set_user_state(user_id, "none")
-        
+
         await update.message.reply_text(
             "پیام شما به مدیریت ارسال شد.\n"
             "\n"
             "لطفا تا زمان پاسخگویی شکیبا باشد و از ارسال مکرر خود داری فرمایید.",
             reply_markup=main_menu(is_admin(user_id))
         )
-        
+
         try:
             await context.bot.send_message(
                 Config.ADMIN_ID,
@@ -735,20 +714,20 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             )
         except Exception:
             pass
-        
+
         return True
-    
+
     from handlers import gift
     if await gift.handle_state(update, context):
         return True
-    
+
     return False
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
-    
+
     if data == "check_join":
         await check_join_callback(update, context)
         return True
@@ -805,4 +784,3 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
     return False
-
