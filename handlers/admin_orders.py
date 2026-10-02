@@ -10,18 +10,19 @@ async def orders_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
     set_user_state(update.effective_user.id, "none")
-    
+
     with db.conn() as c:
         items = c.execute("SELECT * FROM order_items ORDER BY position").fetchall()
-    
+
+    buttons = [(f"✏️ {it['name']}", f"aor_edit:{it['key']}") for it in items]
+
     rows = []
-    for it in items:
-        rows.append([
-            (f"✏️ {it['name']}", f"aor_edit:{it['key']}"),
-        ])
+    for i in range(0, len(buttons), 2):
+        rows.append(list(buttons[i:i+2]))
+
     rows.append([("➕ افزودن آیتم", "aor_add")])
     rows.append([("🔙 بازگشت به پنل مدیریت", "aor_back")])
-    
+
     await update.message.reply_text(
         "💢 به بخش تنظیمات آیتم های سفارش ممبر خوش آمدید\n\n"
         "👈در این بخش میتوانید آیتم‌های سفارش را مدیریت کنید",
@@ -41,17 +42,19 @@ async def aor_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def orders_menu_refresh(update, context):
-    """رفرش لیست آیتم‌ها"""
     q = update.callback_query
     with db.conn() as c:
         items = c.execute("SELECT * FROM order_items ORDER BY position").fetchall()
-    
+
+    buttons = [(f"✏️ {it['name']}", f"aor_edit:{it['key']}") for it in items]
+
     rows = []
-    for it in items:
-        rows.append([(f"✏️ {it['name']}", f"aor_edit:{it['key']}")])
+    for i in range(0, len(buttons), 2):
+        rows.append(list(buttons[i:i+2]))
+
     rows.append([("➕ افزودن آیتم", "aor_add")])
     rows.append([("🔙 بازگشت به پنل مدیریت", "aor_back")])
-    
+
     try:
         await q.message.edit_text(
             "💢 تنظیمات آیتم‌های سفارش\n\nآیتم مورد نظر را برای ویرایش انتخاب کنید:",
