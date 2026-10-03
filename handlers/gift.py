@@ -113,6 +113,11 @@ async def redeem_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⚠️ بعد از این زمان، سکه‌های مصرف‌نشده از بین می‌روند.",
             reply_markup=main_menu(is_admin(user_id))
         )
+
+        # 👈 ارسال/ادیت پست موفقیت در کانال
+        await _send_or_edit_success_post(
+            context, code_id, code, amount, new_used, max_users, post_success_id
+        )
         return
 
     # ====== کد دائمی ======
