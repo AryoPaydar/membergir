@@ -228,7 +228,7 @@ async def gift_credit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
                 [("📤 ارسال به کاربر", "gc_user_send"),
-                 ("📢 ارسال در کانال", "gc_group_send")],
+                 ("📢 ارسال در گروه", "gc_group_send")],
                 [("📜 کدهای سابق", "gc_history"),
                  ("🔙 بازگشت", "gift_admin_main")],
             ])
@@ -263,7 +263,7 @@ async def gift_perm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.edit_text(
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
-                [("📤 ارسال در کانال", "gift_admin_group"),
+                [("📤 ارسال در گروه", "gift_admin_group"),
                  ("👤 ارسال به کاربر", "gift_admin_user")],
                 [("📜 کدهای سابق", "gift_admin_history")],
                 [("🔙 بازگشت", "gift_admin_main")],
@@ -301,7 +301,7 @@ async def gc_back_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
                 [("📤 ارسال به کاربر", "gc_user_send"),
-                 ("📢 ارسال در کانال", "gc_group_send")],
+                 ("📢 ارسال در گروه", "gc_group_send")],
                 [("📜 کدهای سابق", "gc_history"),
                  ("🔙 بازگشت", "gift_admin_main")],
             ])
@@ -407,7 +407,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             await update.message.reply_text("❌ فقط عدد مجاز است.")
             return True
         amount = int(text)
-        # حفظ همه فیلدهای قبلی
         new_data = dict(data)
         new_data["amount"] = amount
         set_user_state(user_id, "gc_input_time", new_data)
@@ -426,7 +425,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         amount = data.get("amount", 0)
         mode = data.get("mode", "all")
 
-        # حفظ همه فیلدها برای مرحله confirm
         confirm_data = {
             "mode": mode,
             "amount": amount,
@@ -469,33 +467,63 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     if state == "gc_input_specific_user":
         query_clean = text.strip().lstrip("@")
+
+        if not query_clean:
+            await update.message.reply_text(
+                "❌ نامعتبر. دوباره تلاش کن.",
+                reply_markup=admin_back_keyboard()
+            )
+            return True
+
         with db.conn() as c:
             if query_clean.isdigit():
-                u = c.execute(
-                    "SELECT user_id, first_name FROM users WHERE user_id = ?",
+                # جستجو بر اساس user_id
+                users = c.execute(
+                    "SELECT user_id, first_name, username FROM users WHERE user_id = ?",
                     (int(query_clean),)
-                ).fetchone()
+                ).fetchall()
             else:
-                u = c.execute(
-                    "SELECT user_id, first_name FROM users WHERE username = ? LIMIT 1",
-                    (query_clean,)
-                ).fetchone()
+                # جستجو بر اساس یوزرنیم یا اسم
+                users = c.execute("""
+                    SELECT user_id, first_name, username FROM users
+                    WHERE username LIKE ? OR first_name LIKE ?
+                    ORDER BY user_id DESC
+                    LIMIT 20
+                """, (f"%{query_clean}%", f"%{query_clean}%")).fetchall()
 
-        if not u:
+        if not users:
             await update.message.reply_text(
                 "❌ کاربری با این مشخصات یافت نشد.",
                 reply_markup=admin_back_keyboard()
             )
             return True
 
-        set_user_state(user_id, "gc_input_amount", {
-            "mode": "specific",
-            "target_id": u["user_id"]
-        })
-        await update.message.reply_text(
-            f"چه مقدار سکه اعتباری برای «{u['first_name'] or 'کاربر'}» ارسال می‌کنید ؟",
-            reply_markup=admin_back_keyboard()
-        )
+        # اگه یک نفر بود، مستقیم انتخاب کن
+        if len(users) == 1:
+            u = users[0]
+            set_user_state(user_id, "gc_input_amount", {
+                "mode": "specific",
+                "target_id": u["user_id"]
+            })
+            await update.message.reply_text(
+                f"چه مقدار سکه اعتباری برای «{u['first_name'] or 'کاربر'}» ارسال می‌کنید ؟",
+                reply_markup=admin_back_keyboard()
+            )
+            return True
+
+        # لیست کاربران
+        txt = f"👥 {len(users)} کاربر یافت شد:\n\n"
+        rows = []
+        for u in users:
+            name = u["first_name"] or "کاربر"
+            username = f"@{u['username']}" if u["username"] else "ندارد"
+            rows.append([
+                (f"👤 {name} | {u['user_id']}",
+                 f"gc_user_pick:{u['user_id']}")
+            ])
+        rows.append([("🔙 بازگشت", "gc_back_menu")])
+
+        await update.message.reply_text(txt, reply_markup=inline(rows))
         return True
 
     if state == "gc_group_code":
@@ -669,6 +697,67 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await gc_credit_history(update, context)
         return True
 
+    # انتخاب کاربر خاص از لیست
+    if data.startswith("gc_user_pick:"):
+        await q.answer()
+        uid = int(data.split(":")[1])
+        user = get_user(uid)
+        if not user:
+            await q.answer("❌ کاربر یافت نشد.", show_alert=True)
+            return True
+        set_user_state(user_id, "gc_input_amount", {
+            "mode": "specific",
+            "target_id": uid
+        })
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
+        await context.bot.send_message(
+            user_id,
+            f"چه مقدار سکه اعتباری برای «{user['first_name'] or 'کاربر'}» ارسال می‌کنید ؟",
+            reply_markup=admin_back_keyboard()
+        )
+        return True
+
+    # حذف کد اعتباری
+    if data.startswith("gc_del:"):
+        await q.answer()
+        code_id = int(data.split(":")[1])
+        with db.conn() as c:
+            c.execute("UPDATE gift_codes SET is_active = 0 WHERE id = ?", (code_id,))
+        await q.answer("✅ کد حذف شد.", show_alert=True)
+        q.data = "gc_history"
+        await gc_credit_history(update, context)
+        return True
+
+    if data.startswith("gc_view:"):
+        await q.answer()
+        code_id = int(data.split(":")[1])
+        with db.conn() as c:
+            g = c.execute("SELECT * FROM gift_codes WHERE id = ?", (code_id,)).fetchone()
+        if not g:
+            await q.answer("❌ یافت نشد.", show_alert=True)
+            return True
+        g = dict(g)
+        expire_text = f"{g['expire_minutes']} دقیقه" if g.get("expire_minutes") else "ندارد"
+        try:
+            await q.message.edit_text(
+                f"🎟 <b>مشخصات کد اعتباری</b>\n\n"
+                f"🔑 کد: <code>{g['code']}</code>\n"
+                f"💰 مقدار: {g['amount']:,} سکه\n"
+                f"⏳ زمان مصرف: {expire_text}\n"
+                f"👤 دریافت‌کنندگان: {g['used_count']}/{g['max_users']}",
+                parse_mode="HTML",
+                reply_markup=inline([
+                    [("🗑 حذف کد", f"gc_del:{code_id}")],
+                    [("🔙 بازگشت", "gc_history")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
     if data == "gc_confirm_yes":
         await gc_confirm_send_users(update, context)
         return True
@@ -736,7 +825,6 @@ async def gc_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TY
     coin_limit = data.get("coin_limit")
     target_id = data.get("target_id")
 
-    # چک coin_limit
     if mode == "coins" and not coin_limit:
         await context.bot.send_message(
             user_id,
@@ -897,7 +985,7 @@ async def gc_credit_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     with db.conn() as c:
         codes = c.execute("""
-            SELECT * FROM gift_codes WHERE type = 'credit_code'
+            SELECT * FROM gift_codes WHERE type = 'credit_code' AND is_active = 1
             ORDER BY id DESC LIMIT 20
         """).fetchall()
 
@@ -911,17 +999,22 @@ async def gc_credit_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
-    text = "📜 کدهای هدیه اعتباری اخیر:\n\n"
+    rows = []
     for g in codes:
-        text += (
-            f"🎟 کد: {g['code']}\n"
-            f"💰 مقدار: {g['amount']:,}\n"
-            f"👤 دریافت‌کنندگان: {g['used_count']}/{g['max_users']}\n"
-            f"————————————\n"
-        )
+        rows.append([
+            (f"🎟 {g['code']} | {g['used_count']}/{g['max_users']}",
+             f"gc_view:{g['id']}")
+        ])
+    rows.append([("🔙 بازگشت", "gc_back_menu")])
 
     try:
-        await q.message.edit_text(text, reply_markup=inline([[("🔙 بازگشت", "gc_back_menu")]]))
+        await q.message.edit_text(
+            f"📜 <b>کدهای هدیه اعتباری</b>\n\n"
+            f"تعداد: {len(codes)} کد\n\n"
+            f"برای مشاهده جزئیات روی کد بزنید:",
+            parse_mode="HTML",
+            reply_markup=inline(rows)
+        )
     except Exception:
         pass
 
