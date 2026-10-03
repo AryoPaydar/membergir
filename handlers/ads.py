@@ -4,7 +4,8 @@ from config import Config
 from database import db
 from bot_manager import (
     get_user, update_user, set_user_state, get_user_state,
-    add_coins, remove_coins, check_membership, check_bot_admin,
+    add_coins, add_commission, get_activity_commission,
+    remove_coins, check_membership, check_bot_admin,
     is_admin, check_referral_milestone, get_setting
 )
 from utils.keyboards import inline, back_button, main_menu
@@ -125,7 +126,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     channel = text[1:]
 
-    # چک کانال ممنوعه
     with db.conn() as c:
         banned = c.execute(
             "SELECT 1 FROM banned_channels WHERE channel = ?", (channel,)
@@ -215,7 +215,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channel_title = data.get("channel_title", "")
     channel_desc = data.get("channel_desc", "")
 
-    # چک مجدد کانال ممنوعه
     with db.conn() as c:
         banned = c.execute(
             "SELECT 1 FROM banned_channels WHERE channel = ?", (channel,)
@@ -241,7 +240,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    # کسر اتمیک سکه
     if not remove_coins(user_id, coins, "order_create", "ثبت سفارش"):
         await context.bot.send_message(
             user_id,
@@ -251,7 +249,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_user_state(user_id, "none")
         return
 
-    # ثبت سفارش
     wait_minutes = int(get_setting("cancel_wait_minutes", "0") or 0)
     cancel_at_ts = now_ts() + (wait_minutes * 60)
 
@@ -266,7 +263,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     bot_username = (await context.bot.get_me()).username
 
-    # چک کانال Ads — اگه وجود داشت به جای دکمه سفارش نمایش بده
     from handlers import admin_ads_channels
     ads_ch = admin_ads_channels.get_next_ads_channel()
 
@@ -284,7 +280,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
         ])
 
-        # اگه کانال Ads تکمیل شد → پیام به ادمین
         if ads_ch.get("_completed"):
             await admin_ads_channels.notify_ads_complete(context, ads_ch)
     else:
@@ -296,7 +291,6 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [("🤖 ورود به ربات", f"https://t.me/{bot_username}"), ("🚫 گزارش", f"report:{order_id}")],
         ])
 
-    # ارسال به کانال
     try:
         post = await context.bot.send_message(
             f"@{Config.ADS_CHANNEL}",
@@ -446,6 +440,25 @@ async def claim_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     add_coins(user_id, coin, "order_join", f"عضویت در سفارش #{order_id}")
 
+    # ====== پورسانت فعالیت به معرف ======
+    referrer_id = user.get("referrer_id")
+    if referrer_id:
+        referrer = get_user(referrer_id)
+        if referrer:
+            commission_percent = get_activity_commission(referrer)
+            commission_amount = coin * commission_percent
+
+            given = add_commission(referrer_id, commission_amount)
+
+            if given > 0:
+                try:
+                    await context.bot.send_message(
+                        referrer_id,
+                        f"💰 {given:,} سکه پورسانت فعالیت از زیرمجموعه‌تون دریافت کردید."
+                    )
+                except Exception:
+                    pass
+
     new_user = get_user(user_id)
     new_coins = new_user["coins"] if new_user else 0
 
@@ -542,7 +555,7 @@ async def report_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Report send error: {e}")
 
 
-# ==================== نمایش پروفایل کاربر (برای ادمین) ====================
+# ==================== نمایش پروفایل کاربر ====================
 async def show_user_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     admin_id = q.from_user.id
