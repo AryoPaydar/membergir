@@ -9,20 +9,29 @@ async def cancel_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
     set_user_state(update.effective_user.id, "none")
-    
+
     cond = get_setting("cancel_enabled", "on")
-    min_members = get_setting("cancel_min_members", "100")
-    wait_seconds = get_setting("cancel_wait_seconds", "60")
-    refund_ratio = get_setting("cancel_refund_ratio", "0.5")
-    
+    min_members = get_setting("cancel_min_members", "0")
+    wait_minutes = get_setting("cancel_wait_minutes", "0")
+
+    if min_members == "0":
+        min_members_display = "00 (بدون محدودیت)"
+    else:
+        min_members_display = min_members
+
+    if wait_minutes == "0":
+        wait_display = "00 (فوری)"
+    else:
+        wait_display = f"{wait_minutes} دقیقه"
+
     await update.message.reply_text(
         "⭕️به بخش تنظیمات لغو سفارش خوش آمدید\n\n"
         "✅با استفاده از تنظیمات این بخش میتوانید لغو سفارشات توسط کاربر را کنترل نمایید\n\n"
         "👈جهت تنظیم هر آیتم گزینه مورد نظر را بزنید",
         reply_markup=inline([
             [("وضعیت: " + ("✅فعال" if cond == "on" else "❌غیر فعال"), "acan_toggle")],
-            [(f"حداقل مجاز: {min_members}", "acan_min"), ("⌛️مدت زمان: " + f"{wait_seconds} ثانیه", "acan_wait")],
-            [(f"ضریب بازگشت: {refund_ratio}", "acan_ratio")],
+            [(f"حداقل مجاز: {min_members_display}", "acan_min"),
+             (f"⌛️مدت زمان: {wait_display}", "acan_wait")],
             [("🔙 بازگشت به پنل مدیریت", "acan_back")],
         ])
     )
@@ -43,47 +52,54 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     user_id = update.effective_user.id
     if not is_admin(user_id):
         return False
-    
+
     state, data = get_user_state(user_id)
     text = (update.message.text or "").strip()
-    
+
     if not state or state == "none":
         return False
-    
+
     if text == "🔙 بازگشت":
         set_user_state(user_id, "none")
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
-    
+
     if state == "acan_min":
+        # 00 یعنی بدون محدودیت
+        if text == "00":
+            set_setting("cancel_min_members", "0")
+            set_user_state(user_id, "none")
+            await update.message.reply_text(
+                "✅ حداقل تعداد ممبر: بدون محدودیت (00)",
+                reply_markup=admin_panel()
+            )
+            return True
         if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
+            await update.message.reply_text("❌ فقط عدد مجاز است (یا 00 برای بدون محدودیت).")
             return True
         set_setting("cancel_min_members", text)
         set_user_state(user_id, "none")
         await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
         return True
-    
+
     if state == "acan_wait":
+        # 00 یعنی فوری
+        if text == "00":
+            set_setting("cancel_wait_minutes", "0")
+            set_user_state(user_id, "none")
+            await update.message.reply_text(
+                "✅ مدت زمان انتظار: فوری (00)",
+                reply_markup=admin_panel()
+            )
+            return True
         if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
+            await update.message.reply_text("❌ فقط عدد مجاز است (یا 00 برای فوری).")
             return True
-        set_setting("cancel_wait_seconds", text)
+        set_setting("cancel_wait_minutes", text)
         set_user_state(user_id, "none")
         await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
         return True
-    
-    if state == "acan_ratio":
-        try:
-            val = float(text)
-        except ValueError:
-            await update.message.reply_text("❌ فقط عدد اعشاری مجاز است (مثلاً 0.5).")
-            return True
-        set_setting("cancel_refund_ratio", str(val))
-        set_user_state(user_id, "none")
-        await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
-        return True
-    
+
     return False
 
 
@@ -92,7 +108,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = q.data
     if not is_admin(q.from_user.id):
         return False
-    
+
     if data == "acan_toggle":
         await q.answer()
         current = get_setting("cancel_enabled", "on")
@@ -102,17 +118,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "acan_min":
         await q.answer()
         set_user_state(q.from_user.id, "acan_min")
-        await q.message.reply_text("حداقل تعداد ممبر مجاز برای لغو سفارش را ارسال کنید:", reply_markup=back_button())
+        await q.message.reply_text(
+            "حداقل تعداد ممبر مجاز برای لغو سفارش را ارسال کنید:\n\n"
+            "⚠️ ارسال 00 یعنی بدون محدودیت",
+            reply_markup=back_button()
+        )
         return True
     if data == "acan_wait":
         await q.answer()
         set_user_state(q.from_user.id, "acan_wait")
-        await q.message.reply_text("چند ثانیه پس از ثبت سفارش کاربر میتواند لغو کند؟", reply_markup=back_button())
-        return True
-    if data == "acan_ratio":
-        await q.answer()
-        set_user_state(q.from_user.id, "acan_ratio")
-        await q.message.reply_text("ضریب بازگشت سکه (مثلاً 0.5) را ارسال کنید:", reply_markup=back_button())
+        await q.message.reply_text(
+            "چند دقیقه پس از ثبت سفارش کاربر میتواند سفارش خود را لغو کند؟\n\n"
+            "⚠️ ارسال 00 یعنی فوری (بدون انتظار)",
+            reply_markup=back_button()
+        )
         return True
     if data == "acan_back":
         await acan_back(update, context)
