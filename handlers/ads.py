@@ -252,11 +252,14 @@ async def order_confirm_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ثبت سفارش
+    wait_minutes = int(get_setting("cancel_wait_minutes", "0") or 0)
+    cancel_at_ts = now_ts() + (wait_minutes * 60)
+
     with db.conn() as c:
         cur = c.execute("""
             INSERT INTO orders (admin_id, channel, channel_id, post_id, member_target, coins_cost, cancel_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, channel, channel_id, None, members, coins, now_ts() + Config.CANCEL_WAIT_SECONDS))
+        """, (user_id, channel, channel_id, None, members, coins, cancel_at_ts))
         order_id = cur.lastrowid
 
     post_text = build_post_text(channel_title, channel_desc, channel)
