@@ -5,30 +5,30 @@ from bot_manager import get_user, get_setting, get_user_state, get_panel_config
 from utils.keyboards import inline, back_button, main_menu
 from utils.helpers import is_positive_int
 
+
 # ==================== منوی زیرمجموعه‌گیری ====================
 async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from bot_manager import get_setting
     user = update.effective_user
     db_user = get_user(user.id)
-    
+
     if not db_user:
         await update.message.reply_text("لطفاً /start را بزنید.")
         return
-    
+
     if get_setting("referral_enabled", "on") != "on":
         await update.message.reply_text("❌ زیرمجموعه‌گیری غیرفعال است.")
         return
-    
+
     normal_invite = Config.PANELS["عادی"]["invite_coin"]
     pro_invite = Config.PANELS["حرفه ای"]["invite_coin"]
     vip_invite = Config.PANELS["ویژه"]["invite_coin"]
-    
+
     normal_percent = 5
     pro_percent = 10
     vip_percent = 15
-    
+
     ads_channel = Config.ADS_CHANNEL or ""
-    
+
     default = (
         f"پنل معمولی(🥉):\n"
         f"(❗️برای همه کاربران فعال هست!)\n"
@@ -50,9 +50,9 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"\n"
         f"🫂جهت دریافت لینک زیر مجموعه گیری خود روی دکمه زیر کلیک کنید👇"
     )
-    
+
     text = get_setting("referral_text", default)
-    
+
     await update.message.reply_text(
         text,
         parse_mode="HTML",
@@ -63,18 +63,19 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== دکمه ارسال بنر ====================
-async def share_referral_banner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ==================== نمایش بنر زیرمجموعه‌گیری ====================
+async def referral_banner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     user_id = q.from_user.id
-    
+
+    banner_type = get_setting("referral_banner_type", "text")
     bot_username = (await context.bot.get_me()).username
     ref_link = f"https://t.me/{bot_username}?start={user_id}"
-    
+
     user = get_user(user_id)
     first_gift = Config.PANELS["عادی"]["invite_coin"] if user else 15
-    
+
     text = (
         f"🚀 با ممبرگیر هایو به راحتی اعضای کانال و گروه خود را بصورت (رایگان؛پولی) افزایش دهید!\n"
         f"👥 افزایش اعضای کانال و گروه شما\n"
@@ -84,8 +85,59 @@ async def share_referral_banner(update: Update, context: ContextTypes.DEFAULT_TY
         f"💯اگه اعضای کانال و گروهت کمه امتحان کن👇\n"
         f"{ref_link}"
     )
-    
-    # ارسال به صورت اینلاین (برای فوروارد راحت)
+
+    # اگه نوع بنر عکس باشه
+    if banner_type == "photo":
+        photo_id = get_setting("referral_photo_id", None)
+        if photo_id:
+            try:
+                await q.message.reply_photo(
+                    photo=photo_id,
+                    caption=text,
+                    reply_markup=inline([
+                        [("📢 اشتراک‌گذاری",
+                          f"https://t.me/share/url?url={ref_link}&text=به ممبرگیر هایو بپیوندید!")],
+                        [("🔙 بازگشت", "referral_back")],
+                    ])
+                )
+                return
+            except Exception:
+                pass
+
+    # حالت متن
+    await q.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=inline([
+            [("📢 اشتراک‌گذاری",
+              f"https://t.me/share/url?url={ref_link}&text=به ممبرگیر هایو بپیوندید!")],
+            [("🔙 بازگشت", "referral_back")],
+        ])
+    )
+
+
+# ==================== دکمه اشتراک‌گذاری ====================
+async def share_referral_banner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    user_id = q.from_user.id
+
+    bot_username = (await context.bot.get_me()).username
+    ref_link = f"https://t.me/{bot_username}?start={user_id}"
+
+    user = get_user(user_id)
+    first_gift = Config.PANELS["عادی"]["invite_coin"] if user else 15
+
+    text = (
+        f"🚀 با ممبرگیر هایو به راحتی اعضای کانال و گروه خود را بصورت (رایگان؛پولی) افزایش دهید!\n"
+        f"👥 افزایش اعضای کانال و گروه شما\n"
+        f"🇮🇷 دریافت ممبر ایرانی کاملا واقعی و فعال\n"
+        f"🎁 دریافت هدیه {first_gift} الماس برای اولین ورود شما\n"
+        f"⚡️ سریع و بدون آفلاینی\n"
+        f"💯اگه اعضای کانال و گروهت کمه امتحان کن👇\n"
+        f"{ref_link}"
+    )
+
     await q.message.reply_text(
         text,
         parse_mode="HTML",
@@ -104,7 +156,7 @@ async def referral_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.delete()
     except Exception:
         pass
-    
+
     from bot_manager import is_admin
     await context.bot.send_message(
         q.from_user.id,
@@ -123,7 +175,7 @@ async def referral_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     banner = get_setting("referral_banner_type", "text")
     threshold = get_setting("referral_join_threshold", str(Config.REFERRAL_JOIN_THRESHOLD))
     coin = get_setting("referral_join_coin", str(Config.REFERRAL_JOIN_COIN))
-    
+
     await update.message.reply_text(
         "⚙️ تنظیمات زیرمجموعه‌گیری",
         reply_markup=inline([
@@ -142,8 +194,8 @@ async def referral_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
-    
-    # === دکمه‌های زیرمجموعه‌گیری ===
+
+    # === دکمه‌های زیرمجموعه‌گیری (کاربر عادی) ===
     if data == "referral_banner":
         await referral_banner(update, context)
         return True
@@ -153,12 +205,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "referral_back":
         await referral_back(update, context)
         return True
-    
+
     # === دکمه‌های تنظیمات ادمین ===
     from bot_manager import is_admin, set_setting, get_setting, set_user_state
     if not is_admin(q.from_user.id):
         return False
-    
+
     if data == "ref_toggle":
         cur = get_setting("referral_enabled", "on")
         set_setting("referral_enabled", "off" if cur == "on" else "on")
@@ -203,7 +255,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     if not is_admin(user_id):
         return False
     state, _ = get_user_state(user_id)
-    
+
     if state == "ref_set_threshold":
         if is_positive_int(update.message.text):
             set_setting("referral_join_threshold", update.message.text.strip())
