@@ -148,13 +148,11 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             new_username = new_user.get("username") if new_user else None
             ref_username = ref_user.get("username") if ref_user else None
 
-            # اسم کاربر جدید
             if new_username:
                 new_display = f"<a href='https://t.me/{new_username}'>{new_name}</a>"
             else:
                 new_display = f"<a href='tg://user?id={new_user_id}'>{new_name}</a>"
 
-            # اسم معرف
             if ref_username:
                 ref_display = f"<a href='https://t.me/{ref_username}'>{ref_name}</a>"
             else:
@@ -169,9 +167,15 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             )
 
             keyboard = inline([
-                [("👤 پروفایل کاربر جدید", f"ref_profile:{new_user_id}")],
-                [("👤 پروفایل معرف", f"ref_profile:{referrer_id}")],
+                [("👤 پروفایل کاربر جدید", f"ref_profile:{new_user_id}:{referrer_id}")],
+                [("👤 پروفایل معرف", f"ref_profile:{referrer_id}:{new_user_id}")],
             ])
+
+            # ذخیره state برای بازگشت
+            set_user_state(Config.ADMIN_ID, "ref_report_state", {
+                "new_user_id": new_user_id,
+                "referrer_id": referrer_id,
+            })
 
             await context.bot.send_message(
                 Config.ADMIN_ID,
