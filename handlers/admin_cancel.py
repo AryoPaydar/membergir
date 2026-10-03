@@ -14,15 +14,8 @@ async def cancel_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     min_members = get_setting("cancel_min_members", "0")
     wait_minutes = get_setting("cancel_wait_minutes", "0")
 
-    if min_members == "0":
-        min_members_display = "00 (بدون محدودیت)"
-    else:
-        min_members_display = min_members
-
-    if wait_minutes == "0":
-        wait_display = "00 (فوری)"
-    else:
-        wait_display = f"{wait_minutes} دقیقه"
+    min_members_display = "00 (بدون محدودیت)" if min_members == "0" else min_members
+    wait_display = "00 (فوری)" if wait_minutes == "0" else f"{wait_minutes} دقیقه"
 
     await update.message.reply_text(
         "⭕️به بخش تنظیمات لغو سفارش خوش آمدید\n\n"
@@ -30,8 +23,8 @@ async def cancel_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👈جهت تنظیم هر آیتم گزینه مورد نظر را بزنید",
         reply_markup=inline([
             [("وضعیت: " + ("✅فعال" if cond == "on" else "❌غیر فعال"), "acan_toggle")],
-            [(f"حداقل مجاز: {min_members_display}", "acan_min"),
-             (f"⌛️مدت زمان: {wait_display}", "acan_wait")],
+            [(f"حداقل ممبر باقی‌مانده: {min_members_display}", "acan_min")],
+            [(f"⌛️مدت زمان انتظار: {wait_display}", "acan_wait")],
             [("🔙 بازگشت به پنل مدیریت", "acan_back")],
         ])
     )
@@ -65,12 +58,11 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         return True
 
     if state == "acan_min":
-        # 00 یعنی بدون محدودیت
         if text == "00":
             set_setting("cancel_min_members", "0")
             set_user_state(user_id, "none")
             await update.message.reply_text(
-                "✅ حداقل تعداد ممبر: بدون محدودیت (00)",
+                "✅ حداقل ممبر باقی‌مانده: بدون محدودیت (00)",
                 reply_markup=admin_panel()
             )
             return True
@@ -83,7 +75,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         return True
 
     if state == "acan_wait":
-        # 00 یعنی فوری
         if text == "00":
             set_setting("cancel_wait_minutes", "0")
             set_user_state(user_id, "none")
@@ -119,7 +110,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await q.answer()
         set_user_state(q.from_user.id, "acan_min")
         await q.message.reply_text(
-            "حداقل تعداد ممبر مجاز برای لغو سفارش را ارسال کنید:\n\n"
+            "حداقل ممبر باقی‌مانده برای لغو سفارش را ارسال کنید:\n\n"
+            "⚠️ مثال: اگه عدد 10 رو بذاری، کاربری که سفارشش 20 ممبره:\n"
+            "• اگه 9 ممبر یا کمتر دریافت کرده باشه → می‌تونه لغو کنه\n"
+            "• اگه 10 ممبر یا بیشتر دریافت کرده باشه → نمی‌تونه لغو کنه\n\n"
             "⚠️ ارسال 00 یعنی بدون محدودیت",
             reply_markup=back_button()
         )
