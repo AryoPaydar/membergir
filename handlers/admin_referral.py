@@ -9,23 +9,79 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
     set_user_state(update.effective_user.id, "none")
-    
+
     power = get_setting("referral_enabled", "on")
     report = get_setting("referral_report", "on")
     banner = get_setting("referral_banner_type", "text")
     threshold = get_setting("referral_join_threshold", "10")
     coin = get_setting("referral_join_coin", "5")
-    
+
     await update.message.reply_text(
         "گزینه مورد نظر را انتخاب نمایید",
         reply_markup=inline([
-            [("وضعیت: " + ("✅فعال" if power == "on" else "❌غیر فعال"), "arf_power"), ("گزارش: " + ("✅فعال" if report == "on" else "❌غیر فعال"), "arf_report")],
+            [("وضعیت: " + ("✅فعال" if power == "on" else "❌غیر فعال"), "arf_power"),
+             ("گزارش: " + ("✅فعال" if report == "on" else "❌غیر فعال"), "arf_report")],
             [("📃نوع بنر: " + banner, "arf_banner")],
-            [(f"👤آستانه: {threshold}", "arf_threshold"), (f"💰سکه پورسانت: {coin}", "arf_coin")],
-            [("📝تنظیم متن بنر", "arf_set_text"), ("🖼تنظیم عکس بنر", "arf_set_photo")],
+            [(f"👤آستانه: {threshold}", "arf_threshold"),
+             (f"💰سکه پورسانت: {coin}", "arf_coin")],
+            [("💎 پورسانت فعالیت (الماس)", "arf_activity_menu")],
+            [("📝تنظیم متن بنر", "arf_set_text"),
+             ("🖼تنظیم عکس بنر", "arf_set_photo")],
             [("🔙 بازگشت به پنل مدیریت", "arf_back")],
         ])
     )
+
+
+async def referral_menu_from_cb(update, context):
+    q = update.callback_query
+    power = get_setting("referral_enabled", "on")
+    report = get_setting("referral_report", "on")
+    banner = get_setting("referral_banner_type", "text")
+    threshold = get_setting("referral_join_threshold", "10")
+    coin = get_setting("referral_join_coin", "5")
+
+    try:
+        await q.message.edit_text(
+            "گزینه مورد نظر را انتخاب نمایید",
+            reply_markup=inline([
+                [("وضعیت: " + ("✅فعال" if power == "on" else "❌غیر فعال"), "arf_power"),
+                 ("گزارش: " + ("✅فعال" if report == "on" else "❌غیر فعال"), "arf_report")],
+                [("📃نوع بنر: " + banner, "arf_banner")],
+                [(f"👤آستانه: {threshold}", "arf_threshold"),
+                 (f"💰سکه پورسانت: {coin}", "arf_coin")],
+                [("💎 پورسانت فعالیت (الماس)", "arf_activity_menu")],
+                [("📝تنظیم متن بنر", "arf_set_text"),
+                 ("🖼تنظیم عکس بنر", "arf_set_photo")],
+                [("🔙 بازگشت به پنل مدیریت", "arf_back")],
+            ])
+        )
+    except Exception:
+        pass
+
+
+async def activity_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    if not is_admin(q.from_user.id):
+        return
+
+    normal_act = get_setting("referral_activity_normal", "0.05")
+    pro_act = get_setting("referral_activity_pro", "0.2")
+    vip_act = get_setting("referral_activity_vip", "0.3")
+
+    try:
+        await q.message.edit_text(
+            "💎 پورسانت فعالیت (به ازای هر عضویت)\n\n"
+            "الماس پورسانت هر پنل رو تنظیم کنید:",
+            reply_markup=inline([
+                [(f"عادی: {normal_act}", "arf_act_normal")],
+                [(f"حرفه ای: {pro_act}", "arf_act_pro")],
+                [(f"ویژه: {vip_act}", "arf_act_vip")],
+                [("🔙 بازگشت", "arf_activity_back")],
+            ])
+        )
+    except Exception:
+        pass
 
 
 async def arf_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -43,18 +99,18 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     user_id = update.effective_user.id
     if not is_admin(user_id):
         return False
-    
+
     state, data = get_user_state(user_id)
     text = (update.message.text or "").strip()
-    
+
     if not state or state == "none":
         return False
-    
+
     if text == "🔙 بازگشت":
         set_user_state(user_id, "none")
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
-    
+
     if state == "arf_threshold":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -63,7 +119,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         set_user_state(user_id, "none")
         await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
         return True
-    
+
     if state == "arf_coin":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -72,13 +128,13 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         set_user_state(user_id, "none")
         await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
         return True
-    
+
     if state == "arf_set_text":
         set_setting("referral_text", text)
         set_user_state(user_id, "none")
         await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
         return True
-    
+
     if state == "arf_set_photo":
         if update.message.photo:
             set_setting("referral_photo_id", update.message.photo[-1].file_id)
@@ -87,7 +143,37 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         else:
             await update.message.reply_text("❌ لطفا عکس ارسال کنید.")
         return True
-    
+
+    if state == "arf_act_normal":
+        try:
+            val = float(text)
+            set_setting("referral_activity_normal", str(val))
+            set_user_state(user_id, "none")
+            await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
+        except ValueError:
+            await update.message.reply_text("❌ فقط عدد مجاز است (مثال: 0.05)")
+        return True
+
+    if state == "arf_act_pro":
+        try:
+            val = float(text)
+            set_setting("referral_activity_pro", str(val))
+            set_user_state(user_id, "none")
+            await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
+        except ValueError:
+            await update.message.reply_text("❌ فقط عدد مجاز است (مثال: 0.2)")
+        return True
+
+    if state == "arf_act_vip":
+        try:
+            val = float(text)
+            set_setting("referral_activity_vip", str(val))
+            set_user_state(user_id, "none")
+            await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
+        except ValueError:
+            await update.message.reply_text("❌ فقط عدد مجاز است (مثال: 0.3)")
+        return True
+
     return False
 
 
@@ -96,24 +182,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = q.data
     if not is_admin(q.from_user.id):
         return False
-    
+
     if data == "arf_power":
         await q.answer()
         cur = get_setting("referral_enabled", "on")
         set_setting("referral_enabled", "off" if cur == "on" else "on")
-        await referral_menu(update, context)
+        await referral_menu_from_cb(update, context)
         return True
     if data == "arf_report":
         await q.answer()
         cur = get_setting("referral_report", "on")
         set_setting("referral_report", "off" if cur == "on" else "on")
-        await referral_menu(update, context)
+        await referral_menu_from_cb(update, context)
         return True
     if data == "arf_banner":
         await q.answer()
         cur = get_setting("referral_banner_type", "text")
         set_setting("referral_banner_type", "photo" if cur == "text" else "text")
-        await referral_menu(update, context)
+        await referral_menu_from_cb(update, context)
         return True
     if data == "arf_threshold":
         await q.answer()
@@ -134,6 +220,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await q.answer()
         set_user_state(q.from_user.id, "arf_set_photo")
         await q.message.reply_text("عکس بنر را ارسال کنید:", reply_markup=back_button())
+        return True
+    if data == "arf_activity_menu":
+        await activity_menu(update, context)
+        return True
+    if data == "arf_activity_back":
+        await q.answer()
+        await referral_menu_from_cb(update, context)
+        return True
+    if data == "arf_act_normal":
+        await q.answer()
+        set_user_state(q.from_user.id, "arf_act_normal")
+        await q.message.reply_text("پورسانت فعالیت پنل عادی (مثال: 0.05):", reply_markup=back_button())
+        return True
+    if data == "arf_act_pro":
+        await q.answer()
+        set_user_state(q.from_user.id, "arf_act_pro")
+        await q.message.reply_text("پورسانت فعالیت پنل حرفه‌ای (مثال: 0.2):", reply_markup=back_button())
+        return True
+    if data == "arf_act_vip":
+        await q.answer()
+        set_user_state(q.from_user.id, "arf_act_vip")
+        await q.message.reply_text("پورسانت فعالیت پنل ویژه (مثال: 0.3):", reply_markup=back_button())
         return True
     if data == "arf_back":
         await arf_back(update, context)
