@@ -121,6 +121,18 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
 
 
 # ==================== لغو سفارش ====================
+def _calc_refund_by_panel(user_id, remaining_members):
+    """محاسبه سکه بازگشتی بر اساس پنل کاربر"""
+    user = get_user(user_id)
+    panel = user.get("panel", "عادی") if user else "عادی"
+    panel_coin = {
+        "عادی": 1.5,
+        "حرفه ای": 2.0,
+        "ویژه": 2.5,
+    }.get(panel, 1.5)
+    return int(remaining_members * panel_coin), panel_coin
+
+
 async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -142,11 +154,16 @@ async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         await q.message.reply_text("❌ لغو سفارش غیرفعال است.")
         return
 
+    # چک زمان انتظار (به دقیقه)
+    wait_minutes = int(get_setting("cancel_wait_minutes", "0") or 0)
     cancel_at = order.get("cancel_at") or 0
-    if now_ts() < cancel_at:
+
+    if wait_minutes > 0 and now_ts() < cancel_at:
         remaining = cancel_at - now_ts()
+        minutes = remaining // 60
+        seconds = remaining % 60
         await q.message.reply_text(
-            f"⏳ {remaining} ثانیه دیگر می‌توانید لغو کنید.\n\n"
+            f"⏳ {minutes} دقیقه و {seconds} ثانیه دیگر می‌توانید لغو کنید.\n\n"
             f"👈 لطفاً صبر کنید.",
             reply_markup=inline([
                 [("🔄 تلاش مجدد", f"cancel_confirm:{order_id}")]
@@ -154,13 +171,13 @@ async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    ratio = float(get_setting("cancel_refund_ratio", "0.5"))
-    remaining = order["member_target"] - order["member_received"]
-    refund = int(remaining * ratio)
+    # محاسبه سکه بازگشتی بر اساس پنل
+    remaining_members = order["member_target"] - order["member_received"]
+    refund, panel_coin = _calc_refund_by_panel(user_id, remaining_members)
 
     await q.message.reply_text(
         f"⁉️ آیا از لغو سفارش <b>#{order.get('post_id') or order_id}</b> مطمئن هستید؟\n\n"
-        f"👥 ممبر باقی‌مانده: {remaining}\n"
+        f"👥 ممبر باقی‌مانده: {remaining_members}\n"
         f"💰 سکه بازگشتی: {refund:,}",
         parse_mode="HTML",
         reply_markup=inline([
@@ -185,9 +202,9 @@ async def cancel_order_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("❌ قبلاً بسته شده.", show_alert=True)
             return
 
-        ratio = float(get_setting("cancel_refund_ratio", "0.5"))
-        remaining = order["member_target"] - order["member_received"]
-        refund = int(remaining * ratio)
+        # محاسبه سکه بازگشتی بر اساس پنل
+        remaining_members = order["member_target"] - order["member_received"]
+        refund, panel_coin = _calc_refund_by_panel(user_id, remaining_members)
 
         c.execute("UPDATE orders SET status='cancelled' WHERE id=?", (order_id,))
         c.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (refund, user_id))
