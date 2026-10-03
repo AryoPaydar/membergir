@@ -138,6 +138,7 @@ async def handle_referral_join(context, referrer_id, new_user_id):
 
     if get_setting("referral_report", "on") == "on":
         try:
+            from telegram import LinkPreviewOptions
             new_user = get_user(new_user_id)
             ref_user = get_user(referrer_id)
 
@@ -147,30 +148,28 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             new_username = new_user.get("username") if new_user else None
             ref_username = ref_user.get("username") if ref_user else None
 
-            # لینک کاربر جدید
-            if new_username:
-                new_link = f"https://t.me/{new_username}"
-            else:
-                new_link = f"tg://user?id={new_user_id}"
-
-            # لینک معرف
-            if ref_username:
-                ref_link = f"https://t.me/{ref_username}"
-            else:
-                ref_link = f"tg://user?id={referrer_id}"
+            new_display = f"{new_name} (https://t.me/{new_username})" if new_username else new_name
+            ref_display = f"{ref_name} (https://t.me/{ref_username})" if ref_username else ref_name
 
             text = (
                 f"📢 <b>گزارش زیرمجموعه</b>\n\n"
-                f"👤 کاربر جدید: <a href='{new_link}'>{new_name}</a>\n"
+                f"👤 کاربر جدید: {new_display}\n"
                 f"🫆 شماره کاربری: <code>{new_user_id}</code>\n\n"
-                f"👤 معرف: <a href='{ref_link}'>{ref_name}</a>\n"
+                f"👤 معرف: {ref_display}\n"
                 f"🫆 شماره کاربری: <code>{referrer_id}</code>"
             )
+
+            keyboard = inline([
+                [("👤 پروفایل کاربر جدید", f"ref_profile:{new_user_id}")],
+                [("👤 پروفایل معرف", f"ref_profile:{referrer_id}")],
+            ])
 
             await context.bot.send_message(
                 Config.ADMIN_ID,
                 text,
                 parse_mode="HTML",
+                reply_markup=keyboard,
+                link_preview_options=LinkPreviewOptions(is_disabled=True)
             )
         except Exception as e:
             print(f"referral report error: {e}")
