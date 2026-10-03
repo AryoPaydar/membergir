@@ -147,9 +147,9 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             text = (
                 f"📢 <b>گزارش زیرمجموعه</b>\n\n"
                 f"👤 کاربر جدید: {new_name}\n"
-                f"🫆 شماره کاربری: <code>{new_user_id}</code>\n\n"
+                f"🫆 شماره کاربری: <a href='tg://user?id={new_user_id}'>{new_user_id}</a>\n\n"
                 f"👤 معرف: {ref_name}\n"
-                f"🫆 شماره کاربری: <code>{referrer_id}</code>"
+                f"🫆 شماره کاربری: <a href='tg://user?id={referrer_id}'>{referrer_id}</a>"
             )
 
             await context.bot.send_message(
