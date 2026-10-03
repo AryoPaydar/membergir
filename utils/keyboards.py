@@ -69,7 +69,7 @@ def inline(rows):
                 line.append(InlineKeyboardButton(**btn))
             else:
                 text, data = btn
-                if data.startswith("http"):
+                if data.startswith("http") or data.startswith("tg://"):
                     line.append(InlineKeyboardButton(text, url=data))
                 else:
                     line.append(InlineKeyboardButton(text, callback_data=data))
