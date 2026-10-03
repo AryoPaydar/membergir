@@ -38,6 +38,7 @@ class Database:
                     panel_expire    TEXT,
                     credit_gift     INTEGER DEFAULT 0,
                     credit_gift_expire INTEGER DEFAULT 0,
+                    pending_commission REAL DEFAULT 0,
                     warnings        INTEGER DEFAULT 0,
                     banned          INTEGER DEFAULT 0,
                     referrer_id     INTEGER,
@@ -77,6 +78,7 @@ class Database:
                 "panel_expire": "TEXT",
                 "credit_gift": "INTEGER DEFAULT 0",
                 "credit_gift_expire": "INTEGER DEFAULT 0",
+                "pending_commission": "REAL DEFAULT 0",
             }
             for col, col_type in new_columns.items():
                 if col not in existing_columns:
