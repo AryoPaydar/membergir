@@ -167,15 +167,9 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             )
 
             keyboard = inline([
-                [("👤 پروفایل کاربر جدید", f"ref_profile:{new_user_id}:{referrer_id}")],
-                [("👤 پروفایل معرف", f"ref_profile:{referrer_id}:{new_user_id}")],
+                [("👤 پروفایل کاربر جدید", f"ref_profile:{new_user_id}:{new_user_id}:{referrer_id}")],
+                [("👤 پروفایل معرف", f"ref_profile:{referrer_id}:{new_user_id}:{referrer_id}")],
             ])
-
-            # ذخیره state برای بازگشت
-            set_user_state(Config.ADMIN_ID, "ref_report_state", {
-                "new_user_id": new_user_id,
-                "referrer_id": referrer_id,
-            })
 
             await context.bot.send_message(
                 Config.ADMIN_ID,
