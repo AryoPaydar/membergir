@@ -12,7 +12,6 @@ import math
 
 # ==================== منوی پیگیری ====================
 async def tracking_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش لیست سفارشات فعال کاربر با صفحه‌بندی"""
     user_id = update.effective_user.id
 
     with db.conn() as c:
@@ -39,7 +38,6 @@ async def tracking_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _show_orders_page(update, context, orders, page, is_first=False):
-    """نمایش یک صفحه از سفارشات"""
     per_page = 5
     total = len(orders)
     total_pages = math.ceil(total / per_page)
@@ -122,7 +120,6 @@ async def _show_orders_page(update, context, orders, page, is_first=False):
 
 # ==================== لغو سفارش ====================
 def _calc_refund_by_panel(user_id, remaining_members):
-    """محاسبه سکه بازگشتی بر اساس پنل کاربر"""
     user = get_user(user_id)
     panel = user.get("panel", "عادی") if user else "عادی"
     panel_coin = {
@@ -135,26 +132,26 @@ def _calc_refund_by_panel(user_id, remaining_members):
 
 async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    await q.answer()
     user_id = q.from_user.id
     order_id = int(q.data.split(":")[1])
 
     with db.conn() as c:
         order = c.execute("SELECT * FROM orders WHERE id=? AND admin_id=?", (order_id, user_id)).fetchone()
     if not order:
-        await q.message.reply_text("❌ سفارش یافت نشد.")
+        await q.answer("❌ سفارش یافت نشد.", show_alert=True)
         return
 
     order = dict(order)
     if order["status"] != "running":
-        await q.message.reply_text("❌ این سفارش فعال نیست.")
+        await q.answer("❌ این سفارش فعال نیست.", show_alert=True)
         return
 
+    # چک فعال بودن لغو (پاپ‌آپ)
     if get_setting("cancel_enabled", "on") != "on":
-        await q.message.reply_text("❌ لغو سفارش غیرفعال است.")
+        await q.answer("⚠️ لغو سفارش غیرفعال است.", show_alert=True)
         return
 
-    # چک زمان انتظار (به دقیقه)
+    # چک زمان انتظار (به دقیقه) — پاپ‌آپ
     wait_minutes = int(get_setting("cancel_wait_minutes", "0") or 0)
     cancel_at = order.get("cancel_at") or 0
 
@@ -162,19 +159,27 @@ async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         remaining = cancel_at - now_ts()
         minutes = remaining // 60
         seconds = remaining % 60
-        await q.message.reply_text(
-            f"⏳ {minutes} دقیقه و {seconds} ثانیه دیگر می‌توانید لغو کنید.\n\n"
-            f"👈 لطفاً صبر کنید.",
-            reply_markup=inline([
-                [("🔄 تلاش مجدد", f"cancel_confirm:{order_id}")]
-            ])
+        time_str = f"{minutes:02d}:{seconds:02d}"
+        await q.answer(f"مدت انتظار لغو سفارش : {time_str}", show_alert=True)
+        return
+
+    # چک حداقل ممبر باقی‌مانده
+    # اگه remaining_members < min_received → لغو غیرفعال
+    min_received = int(get_setting("cancel_min_members", "0") or 0)
+    remaining_members = order["member_target"] - order["member_received"]
+
+    if min_received > 0 and remaining_members < min_received:
+        await q.answer(
+            f"⚠️ امکان لغو وجود ندارد.\n"
+            f"حداقل ممبر باقی‌مانده برای لغو: {min_received}",
+            show_alert=True
         )
         return
 
-    # محاسبه سکه بازگشتی بر اساس پنل
-    remaining_members = order["member_target"] - order["member_received"]
+    # محاسبه سکه بازگشتی
     refund, panel_coin = _calc_refund_by_panel(user_id, remaining_members)
 
+    await q.answer()
     await q.message.reply_text(
         f"⁉️ آیا از لغو سفارش <b>#{order.get('post_id') or order_id}</b> مطمئن هستید؟\n\n"
         f"👥 ممبر باقی‌مانده: {remaining_members}\n"
@@ -202,7 +207,6 @@ async def cancel_order_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("❌ قبلاً بسته شده.", show_alert=True)
             return
 
-        # محاسبه سکه بازگشتی بر اساس پنل
         remaining_members = order["member_target"] - order["member_received"]
         refund, panel_coin = _calc_refund_by_panel(user_id, remaining_members)
 
