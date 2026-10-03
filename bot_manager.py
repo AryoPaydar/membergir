@@ -71,6 +71,58 @@ def add_coins(user_id: int, amount: int, tx_type: str = "add", desc: str = ""):
             VALUES (?, ?, ?, ?)
         """, (user_id, amount, tx_type, desc))
 
+
+def add_commission(user_id: int, amount: float) -> int:
+    """پورسانت اعشاری رو جمع می‌کنه، وقتی به 1 رسید به coins منتقل می‌کنه"""
+    with db.conn() as c:
+        c.execute(
+            "UPDATE users SET pending_commission = COALESCE(pending_commission, 0) + ? WHERE user_id = ?",
+            (amount, user_id)
+        )
+        row = c.execute(
+            "SELECT pending_commission FROM users WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+
+        if row and row["pending_commission"] >= 1:
+            whole = int(row["pending_commission"])
+            c.execute("""
+                UPDATE users
+                SET coins = coins + ?,
+                    total_earned = total_earned + ?,
+                    pending_commission = pending_commission - ?
+                WHERE user_id = ?
+            """, (whole, whole, whole, user_id))
+            c.execute("""
+                INSERT INTO transactions (to_id, amount, type, description)
+                VALUES (?, ?, 'referral_activity_commission', ?)
+            """, (user_id, whole, "پورسانت فعالیت زیرمجموعه"))
+            return whole
+    return 0
+
+
+def get_activity_commission(user: dict) -> float:
+    """پورسانت فعالیت بر اساس پنل معرف (از تنظیمات ادمین)"""
+    panel = user.get("panel", "عادی") if user else "عادی"
+    key_map = {
+        "عادی":    "referral_activity_normal",
+        "حرفه ای": "referral_activity_pro",
+        "ویژه":    "referral_activity_vip",
+    }
+    default_map = {
+        "عادی":    0.05,
+        "حرفه ای": 0.2,
+        "ویژه":    0.3,
+    }
+    key = key_map.get(panel, "referral_activity_normal")
+    default = default_map.get(panel, 0.05)
+    try:
+        val = get_setting(key, str(default))
+        return float(val)
+    except Exception:
+        return default
+
+
 def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str = ""):
     """کسر سکه — اول از credit_gift، بعد از coins"""
     from utils.helpers import now_ts
@@ -300,11 +352,6 @@ def check_panel_expiry(user_id: int) -> bool:
 
 # ==================== بررسی پاداش زیرمجموعه ====================
 async def check_referral_milestone(context, user_id: int):
-    """
-    وقتی کاربر user_id به آستانه عضویت رسید:
-    - به معرف مستقیمش (referrer_id) سکه invite_coin طبق پنلش می‌ده
-    - به معرف معرف (پدربزرگ) سکه invite_coin طبق پنلش می‌ده (فقط 1 بار)
-    """
     user = get_user(user_id)
     if not user:
         return
