@@ -148,8 +148,17 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             new_username = new_user.get("username") if new_user else None
             ref_username = ref_user.get("username") if ref_user else None
 
-            new_display = f"{new_name} (https://t.me/{new_username})" if new_username else new_name
-            ref_display = f"{ref_name} (https://t.me/{ref_username})" if ref_username else ref_name
+            # اسم کاربر جدید
+            if new_username:
+                new_display = f"<a href='https://t.me/{new_username}'>{new_name}</a>"
+            else:
+                new_display = f"<a href='tg://user?id={new_user_id}'>{new_name}</a>"
+
+            # اسم معرف
+            if ref_username:
+                ref_display = f"<a href='https://t.me/{ref_username}'>{ref_name}</a>"
+            else:
+                ref_display = f"<a href='tg://user?id={referrer_id}'>{ref_name}</a>"
 
             text = (
                 f"📢 <b>گزارش زیرمجموعه</b>\n\n"
