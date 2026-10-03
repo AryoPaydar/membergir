@@ -153,8 +153,8 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             )
 
             keyboard = inline([
-                [("👤 پروفایل کاربر جدید", f"tg://user?id={new_user_id}")],
-                [("👤 پروفایل معرف", f"tg://user?id={referrer_id}")],
+                [("👤 کاربر جدید", f"tg://user?id={new_user_id}")],
+                [("👤 معرف", f"tg://user?id={referrer_id}")],
             ])
 
             await context.bot.send_message(
