@@ -138,12 +138,33 @@ async def handle_referral_join(context, referrer_id, new_user_id):
 
     if get_setting("referral_report", "on") == "on":
         try:
+            new_user = get_user(new_user_id)
+            ref_user = get_user(referrer_id)
+
+            new_name = (new_user.get("first_name") if new_user else "") or "کاربر"
+            ref_name = (ref_user.get("first_name") if ref_user else "") or "کاربر"
+
+            text = (
+                f"📢 <b>گزارش زیرمجموعه</b>\n\n"
+                f"👤 کاربر جدید: <a href='tg://user?id={new_user_id}'>{new_name}</a>\n"
+                f"🫆 شماره کاربری: <code>{new_user_id}</code>\n\n"
+                f"👤 معرف: <a href='tg://user?id={referrer_id}'>{ref_name}</a>\n"
+                f"🫆 شماره کاربری: <code>{referrer_id}</code>"
+            )
+
+            keyboard = inline([
+                [("👤 پروفایل کاربر جدید", f"show_profile:{new_user_id}")],
+                [("👤 پروفایل معرف", f"show_profile:{referrer_id}")],
+            ])
+
             await context.bot.send_message(
                 Config.ADMIN_ID,
-                f"📢 گزارش زیرمجموعه\n👤 کاربر {new_user_id} با لینک {referrer_id} عضو شد."
+                text,
+                parse_mode="HTML",
+                reply_markup=keyboard
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"referral report error: {e}")
 
 
 async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
