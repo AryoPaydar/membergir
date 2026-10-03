@@ -422,13 +422,27 @@ async def au_warn_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_count = add_warning(target_id)
     await q.answer(f"✅ اخطار ثبت شد. تعداد اخطار: {new_count}", show_alert=True)
 
-    try:
-        await context.bot.send_message(
-            target_id,
-            f"⚠️ شما یک اخطار دریافت کردید.\nتعداد اخطار: {new_count} از {Config.MAX_WARNINGS}"
+    # اگه به حد مجاز رسید یا بیشتر شد → بن کن
+    if new_count >= Config.MAX_WARNINGS:
+        ban_user(target_id)
+        try:
+            await context.bot.send_message(
+                target_id,
+                f"⛔️ شما به دلیل دریافت {new_count} اخطار از ربات بن شدید."
+            )
+        except Exception:
+            pass
+        await q.message.reply_text(
+            f"⛔️ کاربر {target_id} به دلیل رسیدن به {Config.MAX_WARNINGS} اخطار بن شد."
         )
-    except Exception:
-        pass
+    else:
+        try:
+            await context.bot.send_message(
+                target_id,
+                f"⚠️ شما یک اخطار دریافت کردید.\nتعداد اخطار: {new_count} از {Config.MAX_WARNINGS}"
+            )
+        except Exception:
+            pass
 
     q.data = f"au_warns:{target_id}"
     await au_warns(update, context)
