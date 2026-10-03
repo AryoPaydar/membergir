@@ -31,7 +31,7 @@ async def redeem_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with db.conn() as c:
         row = c.execute("""
             SELECT * FROM gift_codes
-            WHERE code = ? AND type = 'global' AND is_active = 1
+            WHERE code = ? AND type IN ('global', 'credit_code') AND is_active = 1
             ORDER BY id DESC LIMIT 1
         """, (code,)).fetchone()
 
@@ -48,6 +48,11 @@ async def redeem_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
         max_users = row["max_users"]
         used_count = row["used_count"]
         post_success_id = row["post_success_id"]
+        code_type = row["type"]
+        try:
+            expire_minutes = row["expire_minutes"] or 0
+        except Exception:
+            expire_minutes = 0
 
         dup = c.execute(
             "SELECT 1 FROM gift_code_users WHERE code_id = ? AND user_id = ?",
@@ -81,6 +86,36 @@ async def redeem_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         new_used = used_count + 1
 
+    # ====== کد اعتباری ======
+    if code_type == "credit_code":
+        expire_at = now_ts() + (expire_minutes * 60)
+
+        with db.conn() as c:
+            c.execute("""
+                INSERT INTO credit_gifts (user_id, amount, expire_at, created_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            """, (user_id, amount, expire_at))
+
+            c.execute("""
+                UPDATE users SET
+                    credit_gift = COALESCE(credit_gift, 0) + ?,
+                    credit_gift_expire = ?,
+                    coins = coins + ?,
+                    total_earned = total_earned + ?
+                WHERE user_id = ?
+            """, (amount, expire_at, amount, amount, user_id))
+
+        set_user_state(user_id, "none")
+        await update.message.reply_text(
+            f"🎊 تبریک!\n"
+            f"شما {amount:,} سکه هدیه اعتباری دریافت کردید.\n\n"
+            f"⏳ زمان مصرف: {expire_minutes} دقیقه\n"
+            f"⚠️ بعد از این زمان، سکه‌های مصرف‌نشده از بین می‌روند.",
+            reply_markup=main_menu(is_admin(user_id))
+        )
+        return
+
+    # ====== کد دائمی ======
     add_coins(user_id, amount, "gift", f"کد هدیه: {code}")
 
     set_user_state(user_id, "none")
@@ -343,7 +378,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     if not state or state == "none":
         return False
 
-    # دکمه بازگشت
     if text == "🔙 بازگشت به پنل مدیریت":
         set_user_state(user_id, "none")
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
