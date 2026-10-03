@@ -86,7 +86,6 @@ def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str =
         if user["coins"] < amount:
             return False
 
-        # اول از credit_gift کم کن (اگه فعال باشه)
         remaining = amount
         if user["credit_gift"] > 0 and user["credit_gift_expire"] > now:
             use_credit = min(remaining, user["credit_gift"])
@@ -96,7 +95,6 @@ def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str =
             )
             remaining -= use_credit
 
-        # بعد از coins
         c.execute("""
             UPDATE users
             SET coins = coins - ?,
@@ -111,7 +109,6 @@ def remove_coins(user_id: int, amount: int, tx_type: str = "remove", desc: str =
         return True
 
 def transfer_coins(from_id: int, to_id: int, amount: int) -> bool:
-    """انتقال اتمیک سکه بین دو کاربر"""
     if amount <= 0 or from_id == to_id:
         return False
     with db.conn() as c:
@@ -235,7 +232,7 @@ async def check_bot_admin(context, channel: str) -> bool:
     except Exception:
         return False
 
-# ==================== پنل (اصلاح‌شده) ====================
+# ==================== پنل ====================
 def get_panel_config(panel_name: str) -> dict:
     default_cfg = Config.PANELS.get(panel_name, Config.PANELS["عادی"])
     result = dict(default_cfg)
@@ -303,6 +300,11 @@ def check_panel_expiry(user_id: int) -> bool:
 
 # ==================== بررسی پاداش زیرمجموعه ====================
 async def check_referral_milestone(context, user_id: int):
+    """
+    وقتی کاربر user_id به آستانه عضویت رسید:
+    - به معرف مستقیمش (referrer_id) سکه invite_coin طبق پنلش می‌ده
+    - به معرف معرف (پدربزرگ) سکه invite_coin طبق پنلش می‌ده (فقط 1 بار)
+    """
     user = get_user(user_id)
     if not user:
         return
@@ -318,6 +320,7 @@ async def check_referral_milestone(context, user_id: int):
     if user.get("ads_joined", 0) < threshold:
         return
 
+    # ====== پاداش به معرف مستقیم (B) ======
     referrer = get_user(referrer_id)
     if not referrer:
         return
@@ -350,11 +353,48 @@ async def check_referral_milestone(context, user_id: int):
             f"\n"
             f"🎁 دریافت {invite_coin} الماس هدیه \n"
             f"\n"
-            f"👈یکی از زیرمجموعهه های شما برای اولین بار {threshold} دریافت الماس (عضویت در کانال) انجام داد\n"
+            f"👈یکی از زیرمجموعه های شما برای اولین بار {threshold} دریافت الماس (عضویت در کانال) انجام داد\n"
             f"\n"
             f"✅ {invite_coin} الماس بصورت هدیه به حساب شما اضافه شد\n"
             f"\n"
             f"👌همچنین محاسبه {commission_percent} درصد پورسانت حاصل از فعالیت کاربر برای شما فعال شد",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+    # ====== پاداش به معرف معرف (A) ======
+    grand_referrer_id = referrer.get("referrer_id")
+    if not grand_referrer_id:
+        return
+
+    if user.get("referral_rewarded_lvl2"):
+        return
+
+    grand_referrer = get_user(grand_referrer_id)
+    if not grand_referrer:
+        return
+
+    grand_panel_cfg = get_panel_config(grand_referrer.get("panel", "عادی"))
+    grand_coin = grand_panel_cfg["invite_coin"]
+
+    add_coins(
+        grand_referrer_id, grand_coin, "referral_lvl2_commission",
+        f"پاداش مشارکت در جذب زیرمجموعه {user_id} (سطح 2)"
+    )
+
+    update_user(user_id, referral_rewarded_lvl2=1)
+
+    try:
+        await context.bot.send_message(
+            grand_referrer_id,
+            f"🎉تبریک!!\n"
+            f"\n"
+            f"🎁 دریافت {grand_coin} الماس مشارکت \n"
+            f"\n"
+            f"👈یکی از زیرمجموعه‌های سطح 2 شما به آستانه تایید رسید\n"
+            f"\n"
+            f"✅ {grand_coin} الماس بابت مشارکت در جذب زیرمجموعه به حساب شما اضافه شد",
             parse_mode="HTML"
         )
     except Exception:
