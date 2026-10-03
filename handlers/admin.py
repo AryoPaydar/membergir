@@ -870,13 +870,28 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             if u:
                 new_count = add_warning(target)
                 await msg.reply_text(f"⚠️ اخطار ثبت شد. تعداد اخطار: {new_count}")
-                try:
-                    await context.bot.send_message(
-                        target,
-                        f"⚠️ شما یک اخطار دریافت کردید.\nتعداد اخطار: {new_count} از {Config.MAX_WARNINGS}"
+
+                # اگه به حد مجاز رسید یا بیشتر شد → بن کن
+                if new_count >= Config.MAX_WARNINGS:
+                    ban_user(target)
+                    try:
+                        await context.bot.send_message(
+                            target,
+                            f"⛔️ شما به دلیل دریافت {new_count} اخطار از ربات بن شدید."
+                        )
+                    except Exception:
+                        pass
+                    await msg.reply_text(
+                        f"⛔️ کاربر {target} به دلیل رسیدن به {Config.MAX_WARNINGS} اخطار بن شد."
                     )
-                except Exception:
-                    pass
+                else:
+                    try:
+                        await context.bot.send_message(
+                            target,
+                            f"⚠️ شما یک اخطار دریافت کردید.\nتعداد اخطار: {new_count} از {Config.MAX_WARNINGS}"
+                        )
+                    except Exception:
+                        pass
             else:
                 await msg.reply_text("❌ کاربر یافت نشد.")
             set_user_state(user.id, "none")
