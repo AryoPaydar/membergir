@@ -422,7 +422,6 @@ async def au_warn_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_count = add_warning(target_id)
     await q.answer(f"✅ اخطار ثبت شد. تعداد اخطار: {new_count}", show_alert=True)
 
-    # اگه به حد مجاز رسید یا بیشتر شد → بن کن
     if new_count >= Config.MAX_WARNINGS:
         ban_user(target_id)
         try:
@@ -561,13 +560,11 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     if not state or state == "none":
         return False
 
-    # دکمه بازگشت
     if text == "🔙 بازگشت":
         set_user_state(user_id, "none")
         await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
         return True
 
-    # ===== جستجوی کاربر =====
     if state == "au_search_input":
         query_clean = text.strip().lstrip("@")
 
@@ -612,7 +609,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text(text_out, reply_markup=inline(rows))
         return True
 
-    # ===== ارسال هدیه =====
     if state == "au_gift_input":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -648,7 +644,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             pass
         return True
 
-    # ===== ارسال پیام به کاربر =====
     if state == "au_msg_input":
         target_id = data.get("target_id")
 
@@ -681,11 +676,40 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_admin(q.from_user.id):
         return False
 
-    # 🔮 هندل جستجوگر
     if data.startswith("srch_"):
         return await handle_srch_callback(update, context)
 
-    # منوی مدیریت کاربران
+    # 🆕 هندل ref_profile (از گزارش زیرمجموعه)
+    if data.startswith("ref_profile:"):
+        await q.answer()
+        target_id = int(data.split(":")[1])
+        user = get_user(target_id)
+        if not user:
+            await q.answer("❌ کاربر یافت نشد.", show_alert=True)
+            return True
+
+        text = await _build_user_info_text(target_id)
+
+        try:
+            await q.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=inline([
+                    [("🔙 بازگشت", "ref_profile_back")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data == "ref_profile_back":
+        await q.answer()
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
+        return True
+
     if data == "au_menu":
         await q.answer()
         await _show_users_menu_callback(update, context)
@@ -703,7 +727,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await q.answer()
         return True
 
-    # فیلترها
     if data.startswith("au_all:") or data == "au_all":
         page = int(data.split(":")[1]) if ":" in data else 0
         await _handle_filter(update, context, "all", page)
@@ -725,7 +748,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _handle_filter(update, context, "has_order", page)
         return True
 
-    # مدیریت کاربر
     if data.startswith("au_show:"):
         await au_show(update, context)
         return True
@@ -803,12 +825,10 @@ async def _show_users_menu_callback(update, context):
 
 
 # ================================================================
-# ==================== 🔮 جستجوگر (جدید) ====================
+# ==================== 🔮 جستجوگر ====================
 # ================================================================
 
-# ==================== منوی اصلی جستجوگر ====================
 async def search_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """منوی 🔮 جستجوگر — از دکمه ریپلای ادمین"""
     if not is_admin(update.effective_user.id):
         return
 
@@ -839,7 +859,6 @@ async def srch_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== جستجوگر اعضا ====================
 async def srch_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -858,7 +877,6 @@ async def srch_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== جستجوگر کانال ====================
 async def srch_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -877,9 +895,7 @@ async def srch_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== توابع جستجو ====================
 def _search_users_by_channel(channel: str):
-    """پیدا کردن کاربرانی که این کانال رو تبلیغ کردن (بدون تکرار)"""
     channel = channel.lstrip("@").strip()
     with db.conn() as c:
         rows = c.execute("""
@@ -894,7 +910,6 @@ def _search_users_by_channel(channel: str):
 
 
 def _search_channels_by_user(query: str):
-    """پیدا کردن کانال‌هایی که یک کاربر تبلیغ کرده (بدون تکرار)"""
     query = query.strip().lstrip("@")
     with db.conn() as c:
         if query.isdigit():
@@ -921,7 +936,6 @@ def _search_channels_by_user(query: str):
     return dict(u), [r["channel"] for r in rows]
 
 
-# ==================== نمایش لیست کاربران با صفحه‌بندی ====================
 def _format_members_page(users, page):
     per_page = 10
     total = len(users)
@@ -1004,7 +1018,6 @@ async def _handle_srch_channels_input(update, context, text):
     )
 
 
-# ==================== State Handler برای جستجوگر ====================
 async def handle_srch_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
     if not is_admin(user_id):
@@ -1032,7 +1045,6 @@ async def handle_srch_state(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return False
 
 
-# ==================== Callback Handler برای جستجوگر ====================
 async def handle_srch_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     q = update.callback_query
     data = q.data
