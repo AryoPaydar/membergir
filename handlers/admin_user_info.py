@@ -236,7 +236,7 @@ async def _build_user_info_text(user_id):
 
         commission_row = c.execute("""
             SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-            WHERE to_id = ? AND type IN ('referral', 'referral_commission')
+            WHERE to_id = ? AND type IN ('referral', 'referral_commission', 'referral_lvl2_commission')
         """, (user_id,)).fetchone()
         inv_commission = commission_row["total"] if commission_row else 0
 
