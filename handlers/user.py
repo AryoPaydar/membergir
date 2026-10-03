@@ -266,67 +266,34 @@ async def handle_referral_join(
     # گزارش زیرمجموعه برای ادمین
     # --------------------------------------------------------
 
-    if get_setting(
-        "referral_report",
-        "on"
-    ) == "on":
+if get_setting("referral_report", "on") == "on":
+    try:
+        new_user = get_user(new_user_id)
+        ref_user = get_user(referrer_id)
 
-        try:
+        new_name = (new_user.get("first_name") if new_user else "") or "کاربر"
+        ref_name = (ref_user.get("first_name") if ref_user else "") or "کاربر"
 
-            new_user = get_user(new_user_id)
-            ref_user = get_user(referrer_id)
+        text = (
+            f"📢 <b>گزارش زیرمجموعه</b>\n\n"
+            f"👤 کاربر جدید: "
+            f"<a href='tg://user?id={new_user_id}'>{new_name}</a>\n"
+            f"🫆 شماره کاربری: <code>{new_user_id}</code>\n\n"
 
-            new_name = (
-                new_user.get("first_name")
-                if new_user
-                and new_user.get("first_name")
-                else "کاربر"
-            )
+            f"👤 معرف: "
+            f"<a href='tg://user?id={referrer_id}'>{ref_name}</a>\n"
+            f"🫆 شماره کاربری: <code>{referrer_id}</code>"
+        )
 
-            ref_name = (
-                ref_user.get("first_name")
-                if ref_user
-                and ref_user.get("first_name")
-                else "کاربر"
-            )
+        await context.bot.send_message(
+            Config.ADMIN_ID,
+            text,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
 
-            # ------------------------------------------------
-            # Mention واقعی تلگرام
-            #
-            # بدون نیاز به username
-            # ------------------------------------------------
-
-            new_profile = mention_html(
-                new_user_id,
-                str(new_user_id)
-            )
-
-            ref_profile = mention_html(
-                referrer_id,
-                str(referrer_id)
-            )
-
-            text = (
-                f"📢 <b>گزارش زیرمجموعه</b>\n\n"
-
-                f"👤 کاربر جدید: {new_name}\n"
-                f"🫆 شماره کاربری: {new_profile}\n\n"
-
-                f"👤 معرف: {ref_name}\n"
-                f"🫆 شماره کاربری: {ref_profile}"
-            )
-
-            await context.bot.send_message(
-                chat_id=Config.ADMIN_ID,
-                text=text,
-                parse_mode="HTML"
-            )
-
-        except Exception as e:
-
-            print(
-                f"referral report error: {e}"
-            )
+    except Exception as e:
+        print(f"referral report error: {e}")
 
 
 # ============================================================
