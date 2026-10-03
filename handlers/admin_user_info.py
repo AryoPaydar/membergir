@@ -680,11 +680,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return await handle_srch_callback(update, context)
 
     # 🆕 هندل ref_profile (از گزارش زیرمجموعه)
+    # 🆕 هندل ref_profile
     if data.startswith("ref_profile:"):
         await q.answer()
         parts = data.split(":")
         target_id = int(parts[1])
-        other_id = int(parts[2]) if len(parts) > 2 else None
+        new_user_id = int(parts[2]) if len(parts) > 2 else None
+        referrer_id = int(parts[3]) if len(parts) > 3 else None
 
         user = get_user(target_id)
         if not user:
@@ -693,18 +695,61 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         text = await _build_user_info_text(target_id)
 
-        buttons = []
-        if other_id:
-            buttons.append([("👤 کاربر دیگر", f"ref_profile:{other_id}:{target_id}")])
-            buttons.append([("🔙 بستن", "ref_profile_close")])
+        try:
+            await q.message.edit_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=inline([
+                    [("🔙 بازگشت", f"ref_report:{new_user_id}:{referrer_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("ref_report:"):
+        await q.answer()
+        parts = data.split(":")
+        new_user_id = int(parts[1])
+        referrer_id = int(parts[2])
+
+        new_user = get_user(new_user_id)
+        ref_user = get_user(referrer_id)
+
+        new_name = (new_user.get("first_name") if new_user else "") or "کاربر"
+        ref_name = (ref_user.get("first_name") if ref_user else "") or "کاربر"
+
+        new_username = new_user.get("username") if new_user else None
+        ref_username = ref_user.get("username") if ref_user else None
+
+        if new_username:
+            new_display = f"<a href='https://t.me/{new_username}'>{new_name}</a>"
         else:
-            buttons.append([("🔙 بستن", "ref_profile_close")])
+            new_display = f"<a href='tg://user?id={new_user_id}'>{new_name}</a>"
+
+        if ref_username:
+            ref_display = f"<a href='https://t.me/{ref_username}'>{ref_name}</a>"
+        else:
+            ref_display = f"<a href='tg://user?id={referrer_id}'>{ref_name}</a>"
+
+        text = (
+            f"📢 <b>گزارش زیرمجموعه</b>\n\n"
+            f"👤 کاربر جدید: {new_display}\n"
+            f"🫆 شماره کاربری: <code>{new_user_id}</code>\n\n"
+            f"👤 معرف: {ref_display}\n"
+            f"🫆 شماره کاربری: <code>{referrer_id}</code>"
+        )
+
+        keyboard = inline([
+            [("👤 پروفایل کاربر جدید", f"ref_profile:{new_user_id}:{new_user_id}:{referrer_id}")],
+            [("👤 پروفایل معرف", f"ref_profile:{referrer_id}:{new_user_id}:{referrer_id}")],
+        ])
 
         try:
             await q.message.edit_text(
                 text,
                 parse_mode="HTML",
-                reply_markup=inline(buttons)
+                reply_markup=keyboard
             )
         except Exception:
             pass
