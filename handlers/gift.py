@@ -228,7 +228,7 @@ async def gift_credit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
                 [("📤 ارسال به کاربر", "gc_user_send"),
-                 ("📢 ارسال در گروه", "gc_group_send")],
+                 ("📢 ارسال در کانال", "gc_group_send")],
                 [("📜 کدهای سابق", "gc_history"),
                  ("🔙 بازگشت", "gift_admin_main")],
             ])
@@ -263,7 +263,7 @@ async def gift_perm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.edit_text(
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
-                [("📤 ارسال در گروه", "gift_admin_group"),
+                [("📤 ارسال در کانال", "gift_admin_group"),
                  ("👤 ارسال به کاربر", "gift_admin_user")],
                 [("📜 کدهای سابق", "gift_admin_history")],
                 [("🔙 بازگشت", "gift_admin_main")],
@@ -301,7 +301,7 @@ async def gc_back_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
                 [("📤 ارسال به کاربر", "gc_user_send"),
-                 ("📢 ارسال در گروه", "gc_group_send")],
+                 ("📢 ارسال در کانال", "gc_group_send")],
                 [("📜 کدهای سابق", "gc_history"),
                  ("🔙 بازگشت", "gift_admin_main")],
             ])
