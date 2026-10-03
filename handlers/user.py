@@ -147,21 +147,15 @@ async def handle_referral_join(context, referrer_id, new_user_id):
             text = (
                 f"📢 <b>گزارش زیرمجموعه</b>\n\n"
                 f"👤 کاربر جدید: {new_name}\n"
-                f"🫆 شماره کاربری: <code>{new_user_id}</code>\n\n"
+                f"🫆 شماره کاربری: <a href='tg://user?id={new_user_id}'>{new_user_id}</a>\n\n"
                 f"👤 معرف: {ref_name}\n"
-                f"🫆 شماره کاربری: <code>{referrer_id}</code>"
+                f"🫆 شماره کاربری: <a href='tg://user?id={referrer_id}'>{referrer_id}</a>"
             )
-
-            keyboard = inline([
-                [("👤 کاربر جدید", f"tg://user?id={new_user_id}")],
-                [("👤 معرف", f"tg://user?id={referrer_id}")],
-            ])
 
             await context.bot.send_message(
                 Config.ADMIN_ID,
                 text,
                 parse_mode="HTML",
-                reply_markup=keyboard
             )
         except Exception as e:
             print(f"referral report error: {e}")
