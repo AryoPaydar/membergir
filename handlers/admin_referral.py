@@ -14,7 +14,6 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     report = get_setting("referral_report", "on")
     banner = get_setting("referral_banner_type", "text")
     threshold = get_setting("referral_join_threshold", "10")
-    coin = get_setting("referral_join_coin", "5")
 
     await update.message.reply_text(
         "گزینه مورد نظر را انتخاب نمایید",
@@ -22,8 +21,7 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [("وضعیت: " + ("✅فعال" if power == "on" else "❌غیر فعال"), "arf_power"),
              ("گزارش: " + ("✅فعال" if report == "on" else "❌غیر فعال"), "arf_report")],
             [("📃نوع بنر: " + banner, "arf_banner")],
-            [(f"👤آستانه: {threshold}", "arf_threshold"),
-             (f"💰سکه پورسانت: {coin}", "arf_coin")],
+            [(f"👤آستانه: {threshold}", "arf_threshold")],
             [("💎 پورسانت فعالیت (الماس)", "arf_activity_menu")],
             [("📝تنظیم متن بنر", "arf_set_text"),
              ("🖼تنظیم عکس بنر", "arf_set_photo")],
@@ -38,7 +36,6 @@ async def referral_menu_from_cb(update, context):
     report = get_setting("referral_report", "on")
     banner = get_setting("referral_banner_type", "text")
     threshold = get_setting("referral_join_threshold", "10")
-    coin = get_setting("referral_join_coin", "5")
 
     try:
         await q.message.edit_text(
@@ -47,8 +44,7 @@ async def referral_menu_from_cb(update, context):
                 [("وضعیت: " + ("✅فعال" if power == "on" else "❌غیر فعال"), "arf_power"),
                  ("گزارش: " + ("✅فعال" if report == "on" else "❌غیر فعال"), "arf_report")],
                 [("📃نوع بنر: " + banner, "arf_banner")],
-                [(f"👤آستانه: {threshold}", "arf_threshold"),
-                 (f"💰سکه پورسانت: {coin}", "arf_coin")],
+                [(f"👤آستانه: {threshold}", "arf_threshold")],
                 [("💎 پورسانت فعالیت (الماس)", "arf_activity_menu")],
                 [("📝تنظیم متن بنر", "arf_set_text"),
                  ("🖼تنظیم عکس بنر", "arf_set_photo")],
@@ -116,15 +112,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             await update.message.reply_text("❌ فقط عدد مجاز است.")
             return True
         set_setting("referral_join_threshold", text)
-        set_user_state(user_id, "none")
-        await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
-        return True
-
-    if state == "arf_coin":
-        if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
-            return True
-        set_setting("referral_join_coin", text)
         set_user_state(user_id, "none")
         await update.message.reply_text("✅ با موفقیت تنظیم شد.", reply_markup=admin_panel())
         return True
@@ -205,11 +192,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await q.answer()
         set_user_state(q.from_user.id, "arf_threshold")
         await q.message.reply_text("آستانه عضویت زیرمجموعه را وارد کنید:", reply_markup=back_button())
-        return True
-    if data == "arf_coin":
-        await q.answer()
-        set_user_state(q.from_user.id, "arf_coin")
-        await q.message.reply_text("تعداد سکه پورسانت را وارد کنید:", reply_markup=back_button())
         return True
     if data == "arf_set_text":
         await q.answer()
