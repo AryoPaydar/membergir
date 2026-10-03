@@ -254,20 +254,26 @@ async def gift_admin_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
-# ==================== هدیه دائمی - منوی جدید ====================
+# ==================== هدیه دائمی - منوی جدید (با گزینه‌های قدیمی + جدید) ====================
 async def gift_perm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     set_user_state(q.from_user.id, "none")
     try:
         await q.message.edit_text(
-            "کاربران مد نظر خود را انتخاب نمایید :",
+            "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
+                # گزینه‌های قدیمی
+                [("📤 ارسال در گروه (کد)", "gift_admin_group"),
+                 ("👤 ارسال به کاربر", "gift_admin_user")],
+                # گزینه‌های جدید
                 [("👥 همه کاربران", "gp_target_all")],
                 [("✅ کاربران دارای سفارش فعال", "gp_target_active"),
                  ("❌ کاربران بدون سفارش فعال", "gp_target_inactive")],
                 [("💰 کاربران دارای سکه مشخص", "gp_target_coins"),
                  ("👤 کاربر خاص", "gp_target_specific")],
+                # قدیمی
+                [("📜 کدهای سابق", "gift_admin_history")],
                 [("🔙 بازگشت", "gift_admin_main")],
             ])
         )
@@ -675,7 +681,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
                 (f"👤 {name} | {u['user_id']}",
                  f"gp_user_pick:{u['user_id']}")
             ])
-        rows.append([("🔙 بازگشت", "gift_admin_main")])
+        rows.append([("🔙 بازگشت", "gift_perm_menu")])
 
         await update.message.reply_text(txt, reply_markup=inline(rows))
         return True
@@ -736,7 +742,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # ====== استیت‌های قدیمی ======
+    # ====== استیت‌های قدیمی (کد دائمی گروه) ======
     if state == "gift_code_create_code":
         set_user_state(user_id, "gift_code_create_amount", {"code": text})
         await update.message.reply_text(
@@ -779,6 +785,24 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     if state == "gift_search_user":
         await handle_gift_user_search(update, context, text)
+        return True
+
+    if state == "gift_user_amount":
+        if not is_positive_int(text):
+            await update.message.reply_text("❌ فقط عدد مجاز است.")
+            return True
+        target_id = data.get("target_id")
+        user = get_user(target_id)
+        name = user["first_name"] if user else "کاربر"
+        set_user_state(user_id, "gift_user_confirm", {
+            "target_id": target_id, "amount": int(text)
+        })
+        await update.message.reply_text(
+            f"آیا از ارسال {int(text):,} هدیه به {name} مطمئن هستید ؟",
+            reply_markup=inline([
+                [("✅ بله", "gift_user_yes"), ("❌ خیر", "gift_admin_back")],
+            ])
+        )
         return True
 
     return False
@@ -841,7 +865,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await gc_group_confirm_send(update, context)
         return True
 
-    # ===== هدیه دائمی =====
+    # ===== هدیه دائمی (جدید) =====
     if data == "gp_target_all":
         await gp_target_all(update, context)
         return True
@@ -944,6 +968,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
 
+    # ===== قدیمی دائمی =====
     if data == "gift_admin_group":
         await gift_admin_group(update, context)
         return True
@@ -1269,7 +1294,7 @@ async def gc_credit_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
-# ==================== توابع قدیمی ====================
+# ==================== توابع قدیمی هدیه دائمی ====================
 async def gift_admin_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
