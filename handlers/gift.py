@@ -218,25 +218,6 @@ async def gift_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================== هدیه اعتباری - منوی اصلی ====================
-async def gift_credit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    set_user_state(q.from_user.id, "none")
-    try:
-        await q.message.edit_text(
-            "چه کاری میخواهید انجام دهید ؟",
-            reply_markup=inline([
-                [("📤 ارسال به کاربر", "gc_user_send"),
-                 ("📢 ارسال در گروه", "gc_group_send")],
-                [("📜 کدهای سابق", "gc_history"),
-                 ("🔙 بازگشت", "gift_admin_main")],
-            ])
-        )
-    except Exception:
-        pass
-
-
 async def gift_admin_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -254,7 +235,26 @@ async def gift_admin_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
-# ==================== هدیه دائمی - منوی جدید (با گزینه‌های قدیمی + جدید) ====================
+# ==================== هدیه اعتباری - منوی اصلی ====================
+async def gift_credit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    set_user_state(q.from_user.id, "none")
+    try:
+        await q.message.edit_text(
+            "چه کاری میخواهید انجام دهید ؟",
+            reply_markup=inline([
+                [("📢 ارسال در کانال", "gc_group_send"),
+                 ("📤 ارسال به کاربر", "gc_user_send")],
+                [("📜 کدهای سابق", "gc_history"),
+                 ("🔙 بازگشت", "gift_admin_main")],
+            ])
+        )
+    except Exception:
+        pass
+
+
+# ==================== هدیه دائمی - منوی اصلی ====================
 async def gift_perm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -263,18 +263,10 @@ async def gift_perm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.edit_text(
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
-                # گزینه‌های قدیمی
-                [("📤 ارسال در گروه (کد)", "gift_admin_group"),
-                 ("👤 ارسال به کاربر", "gift_admin_user")],
-                # گزینه‌های جدید
-                [("👥 همه کاربران", "gp_target_all")],
-                [("✅ کاربران دارای سفارش فعال", "gp_target_active"),
-                 ("❌ کاربران بدون سفارش فعال", "gp_target_inactive")],
-                [("💰 کاربران دارای سکه مشخص", "gp_target_coins"),
-                 ("👤 کاربر خاص", "gp_target_specific")],
-                # قدیمی
-                [("📜 کدهای سابق", "gift_admin_history")],
-                [("🔙 بازگشت", "gift_admin_main")],
+                [("📢 ارسال در کانال", "gift_admin_group"),
+                 ("📤 ارسال به کاربر", "gift_admin_user")],
+                [("📜 کدهای سابق", "gift_admin_history"),
+                 ("🔙 بازگشت", "gift_admin_main")],
             ])
         )
     except Exception:
@@ -308,8 +300,8 @@ async def gc_back_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.edit_text(
             "چه کاری میخواهید انجام دهید ؟",
             reply_markup=inline([
-                [("📤 ارسال به کاربر", "gc_user_send"),
-                 ("📢 ارسال در گروه", "gc_group_send")],
+                [("📢 ارسال در کانال", "gc_group_send"),
+                 ("📤 ارسال به کاربر", "gc_user_send")],
                 [("📜 کدهای سابق", "gc_history"),
                  ("🔙 بازگشت", "gift_admin_main")],
             ])
@@ -369,59 +361,7 @@ async def gc_target_specific(update, context):
     )
 
 
-# ==================== هدیه دائمی → ارسال به کاربر (جدید) ====================
-async def gp_target_all(update, context):
-    q = update.callback_query
-    await q.answer()
-    set_user_state(q.from_user.id, "gp_input_amount", {"mode": "all"})
-    await q.message.reply_text(
-        "چه مقدار سکه هدیه میخواهید ارسال کنید ؟",
-        reply_markup=admin_back_keyboard()
-    )
-
-
-async def gp_target_active(update, context):
-    q = update.callback_query
-    await q.answer()
-    set_user_state(q.from_user.id, "gp_input_amount", {"mode": "active"})
-    await q.message.reply_text(
-        "چه مقدار سکه هدیه میخواهید ارسال کنید ؟",
-        reply_markup=admin_back_keyboard()
-    )
-
-
-async def gp_target_inactive(update, context):
-    q = update.callback_query
-    await q.answer()
-    set_user_state(q.from_user.id, "gp_input_amount", {"mode": "inactive"})
-    await q.message.reply_text(
-        "چه مقدار سکه هدیه میخواهید ارسال کنید ؟",
-        reply_markup=admin_back_keyboard()
-    )
-
-
-async def gp_target_coins(update, context):
-    q = update.callback_query
-    await q.answer()
-    set_user_state(q.from_user.id, "gp_input_coins_limit")
-    await q.message.reply_text(
-        "چه کاربرانی میتوانند هدیه دریافت نمایند :\n\n"
-        "⚠️ عدد 10 یعنی کاربران دارای 0 تا 10 موجودی سکه را دریافت نمایند",
-        reply_markup=admin_back_keyboard()
-    )
-
-
-async def gp_target_specific(update, context):
-    q = update.callback_query
-    await q.answer()
-    set_user_state(q.from_user.id, "gp_input_specific_user", {"mode": "specific"})
-    await q.message.reply_text(
-        "نام کاربری، یوزرنیم یا شناسه کاربری فرد مورد نظر را ارسال فرمایید:",
-        reply_markup=admin_back_keyboard()
-    )
-
-
-# ==================== هدیه اعتباری → ارسال در گروه (کد) ====================
+# ==================== هدیه اعتباری → ارسال در کانال (کد) ====================
 async def gc_group_send(update, context):
     q = update.callback_query
     await q.answer()
@@ -462,7 +402,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
     # ====== ادمین ======
 
-    # ===== هدیه اعتباری - ورودی مقدار =====
     if state == "gc_input_amount":
         if not is_positive_int(text):
             await update.message.reply_text("❌ فقط عدد مجاز است.")
@@ -526,7 +465,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # ===== هدیه اعتباری - کاربر خاص =====
     if state == "gc_input_specific_user":
         if text == "🔙 بازگشت":
             set_user_state(user_id, "none")
@@ -587,106 +525,6 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         await update.message.reply_text(txt, reply_markup=inline(rows))
         return True
 
-    # ===== هدیه دائمی - ورودی مقدار =====
-    if state == "gp_input_amount":
-        if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
-            return True
-        amount = int(text)
-        confirm_data = dict(data)
-        confirm_data["amount"] = amount
-        set_user_state(user_id, "gp_confirm", confirm_data)
-
-        mode_text = {
-            "all": "همه کاربران",
-            "active": "کاربران دارای سفارش فعال",
-            "inactive": "کاربران بدون سفارش فعال",
-            "coins": "کاربران دارای سکه مشخص",
-            "specific": "کاربر خاص",
-        }.get(data.get("mode", "all"), data.get("mode", "all"))
-
-        await update.message.reply_text(
-            f"آیا از ارسال {amount:,} سکه هدیه دائمی به «{mode_text}» مطمئن هستید ؟",
-            reply_markup=inline([
-                [("✅ بله", "gp_confirm_yes"), ("❌ خیر", "gift_admin_back")],
-            ])
-        )
-        return True
-
-    if state == "gp_input_coins_limit":
-        if not is_positive_int(text):
-            await update.message.reply_text("❌ فقط عدد مجاز است.")
-            return True
-        coin_limit = int(text)
-        set_user_state(user_id, "gp_input_amount", {"mode": "coins", "coin_limit": coin_limit})
-        await update.message.reply_text(
-            "چه مقدار سکه هدیه میخواهید ارسال کنید ؟",
-            reply_markup=admin_back_keyboard()
-        )
-        return True
-
-    # ===== هدیه دائمی - کاربر خاص =====
-    if state == "gp_input_specific_user":
-        if text == "🔙 بازگشت":
-            set_user_state(user_id, "none")
-            await update.message.reply_text("👑 پنل مدیریت", reply_markup=admin_panel())
-            return True
-
-        query_clean = text.strip().lstrip("@")
-        if not query_clean:
-            await update.message.reply_text(
-                "❌ نامعتبر. دوباره تلاش کن.",
-                reply_markup=admin_back_keyboard()
-            )
-            return True
-
-        with db.conn() as c:
-            if query_clean.isdigit():
-                users = c.execute(
-                    "SELECT user_id, first_name, username FROM users WHERE user_id = ?",
-                    (int(query_clean),)
-                ).fetchall()
-            else:
-                users = c.execute("""
-                    SELECT user_id, first_name, username FROM users
-                    WHERE username LIKE ? OR first_name LIKE ?
-                    ORDER BY user_id DESC
-                    LIMIT 20
-                """, (f"%{query_clean}%", f"%{query_clean}%")).fetchall()
-
-        if not users:
-            await update.message.reply_text(
-                "❌ کاربری با این مشخصات یافت نشد.",
-                reply_markup=admin_back_keyboard()
-            )
-            return True
-
-        if len(users) == 1:
-            u = users[0]
-            set_user_state(user_id, "gp_input_amount", {
-                "mode": "specific",
-                "target_id": u["user_id"]
-            })
-            await update.message.reply_text(
-                f"چه مقدار سکه هدیه برای «{u['first_name'] or 'کاربر'}» ارسال می‌کنید ؟",
-                reply_markup=admin_back_keyboard()
-            )
-            return True
-
-        txt = f"👥 {len(users)} کاربر یافت شد:\n\n"
-        rows = []
-        for u in users:
-            name = u["first_name"] or "کاربر"
-            rows.append([
-                (f"👤 {name} | {u['user_id']}",
-                 f"gp_user_pick:{u['user_id']}")
-            ])
-        rows.append([("🔙 بازگشت", "gift_perm_menu")])
-
-        await update.message.reply_text(txt, reply_markup=inline(rows))
-        return True
-
-    # ===== گروه اعتباری =====
     if state == "gc_group_code":
         set_user_state(user_id, "gc_group_amount", {"code": text})
         await update.message.reply_text(
@@ -742,7 +580,7 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         )
         return True
 
-    # ====== استیت‌های قدیمی (کد دائمی گروه) ======
+    # ====== استیت‌های قدیمی (دائمی) ======
     if state == "gift_code_create_code":
         set_user_state(user_id, "gift_code_create_amount", {"code": text})
         await update.message.reply_text(
@@ -830,7 +668,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await gift_admin_back(update, context)
         return True
 
-    # ===== هدیه اعتباری =====
     if data == "gc_user_send":
         await gc_user_send(update, context)
         return True
@@ -865,27 +702,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await gc_group_confirm_send(update, context)
         return True
 
-    # ===== هدیه دائمی (جدید) =====
-    if data == "gp_target_all":
-        await gp_target_all(update, context)
-        return True
-    if data == "gp_target_active":
-        await gp_target_active(update, context)
-        return True
-    if data == "gp_target_inactive":
-        await gp_target_inactive(update, context)
-        return True
-    if data == "gp_target_coins":
-        await gp_target_coins(update, context)
-        return True
-    if data == "gp_target_specific":
-        await gp_target_specific(update, context)
-        return True
-    if data == "gp_confirm_yes":
-        await gp_confirm_send_users(update, context)
-        return True
-
-    # ===== انتخاب کاربر خاص =====
     if data.startswith("gc_user_pick:"):
         await q.answer()
         uid = int(data.split(":")[1])
@@ -908,29 +724,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return True
 
-    if data.startswith("gp_user_pick:"):
-        await q.answer()
-        uid = int(data.split(":")[1])
-        user = get_user(uid)
-        if not user:
-            await q.answer("❌ کاربر یافت نشد.", show_alert=True)
-            return True
-        set_user_state(user_id, "gp_input_amount", {
-            "mode": "specific",
-            "target_id": uid
-        })
-        try:
-            await q.message.delete()
-        except Exception:
-            pass
-        await context.bot.send_message(
-            user_id,
-            f"چه مقدار سکه هدیه برای «{user['first_name'] or 'کاربر'}» ارسال می‌کنید ؟",
-            reply_markup=admin_back_keyboard()
-        )
-        return True
-
-    # ===== حذف کد اعتباری =====
     if data.startswith("gc_del:"):
         await q.answer()
         code_id = int(data.split(":")[1])
@@ -968,7 +761,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return True
 
-    # ===== قدیمی دائمی =====
     if data == "gift_admin_group":
         await gift_admin_group(update, context)
         return True
@@ -1099,86 +891,6 @@ async def gc_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as e:
             failed += 1
             log.error(f"❌ gc send error to {uid}: {e}")
-
-    set_user_state(user_id, "none")
-    await context.bot.send_message(
-        user_id,
-        f"✅ ارسال شد.\n✔️ موفق: {sent}\n❌ ناموفق: {failed}",
-        reply_markup=admin_panel()
-    )
-
-
-# ==================== اجرای ارسال هدیه دائمی ====================
-async def gp_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-
-    state, data = get_user_state(user_id)
-    if state != "gp_confirm":
-        await q.answer("اطلاعات منقضی شده.", show_alert=True)
-        return
-
-    mode = data.get("mode", "all")
-    amount = data.get("amount", 0)
-    coin_limit = data.get("coin_limit")
-    target_id = data.get("target_id")
-
-    if mode == "coins" and not coin_limit:
-        await context.bot.send_message(
-            user_id,
-            "❌ محدوده سکه مشخص نشده. دوباره تلاش کن.",
-            reply_markup=admin_panel()
-        )
-        set_user_state(user_id, "none")
-        return
-
-    with db.conn() as c:
-        if mode == "all":
-            users = c.execute("SELECT user_id FROM users WHERE banned = 0").fetchall()
-        elif mode == "active":
-            users = c.execute("""
-                SELECT DISTINCT u.user_id FROM users u
-                INNER JOIN orders o ON o.admin_id = u.user_id
-                WHERE o.status = 'running' AND u.banned = 0
-            """).fetchall()
-        elif mode == "inactive":
-            users = c.execute("""
-                SELECT user_id FROM users
-                WHERE banned = 0 AND user_id NOT IN (
-                    SELECT DISTINCT admin_id FROM orders WHERE status = 'running'
-                )
-            """).fetchall()
-        elif mode == "coins":
-            users = c.execute("""
-                SELECT user_id FROM users
-                WHERE banned = 0 AND coins <= ?
-            """, (coin_limit,)).fetchall()
-        elif mode == "specific":
-            users = [{"user_id": target_id}] if target_id else []
-        else:
-            users = []
-
-    sent = 0
-    failed = 0
-    import logging
-    log = logging.getLogger(__name__)
-
-    for u in users:
-        uid = u["user_id"] if isinstance(u, dict) else u["user_id"]
-        try:
-            add_coins(uid, amount, "admin_gift", "هدیه دائمی از طرف مدیریت")
-
-            await context.bot.send_message(
-                uid,
-                f"🎁 هدیه دائمی دریافت کردید!\n\n"
-                f"💰 مقدار: {amount:,} سکه\n\n"
-                f"✅ این هدیه به موجودی شما اضافه شد."
-            )
-            sent += 1
-        except Exception as e:
-            failed += 1
-            log.error(f"❌ gp send error to {uid}: {e}")
 
     set_user_state(user_id, "none")
     await context.bot.send_message(
