@@ -164,14 +164,16 @@ async def cancel_order_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     # چک حداقل ممبر باقی‌مانده
-    # اگه remaining_members < min_received → لغو غیرفعال
     min_received = int(get_setting("cancel_min_members", "0") or 0)
     remaining_members = order["member_target"] - order["member_received"]
 
-    if min_received > 0 and remaining_members < min_received:
+    # اگه باقی‌مانده کمتر از حداقل باشه → لغو غیرفعال
+    # یعنی 1 <= remaining <= min_received-1 → نمی‌تونه لغو کنه
+    if min_received > 0 and remaining_members <= min_received:
         await q.answer(
             f"⚠️ امکان لغو وجود ندارد.\n"
-            f"حداقل ممبر باقی‌مانده برای لغو: {min_received}",
+            f"حداقل مجاز برای لغو : {min_received}\n"
+            f"مقدار ممبر باقی مانده شما : {remaining_members}",
             show_alert=True
         )
         return
