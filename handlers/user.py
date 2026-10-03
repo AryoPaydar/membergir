@@ -136,44 +136,34 @@ async def handle_referral_join(context, referrer_id, new_user_id):
     except Exception:
         pass
 
-    if get_setting("referral_report", "on") == "on":
-        try:
-            new_user = get_user(new_user_id)
-            ref_user = get_user(referrer_id)
+if get_setting("referral_report", "on") == "on":
+    try:
+        new_user = get_user(new_user_id)
+        ref_user = get_user(referrer_id)
 
-            new_name = (new_user.get("first_name") if new_user else "") or "کاربر"
-            ref_name = (ref_user.get("first_name") if ref_user else "") or "کاربر"
+        new_name = (new_user.get("first_name") if new_user else "") or "کاربر"
+        ref_name = (ref_user.get("first_name") if ref_user else "") or "کاربر"
 
-            new_username = new_user.get("username") if new_user else None
-            ref_username = ref_user.get("username") if ref_user else None
+        # لینک مستقیم به پروفایل کاربر با ID
+        new_link = f"tg://user?id={new_user_id}"
+        ref_link = f"tg://user?id={referrer_id}"
 
-            # لینک کاربر جدید
-            if new_username:
-                new_link = f"https://t.me/{new_username}"
-            else:
-                new_link = f"tg://user?id={new_user_id}"
+        text = (
+            f"📢 <b>گزارش زیرمجموعه</b>\n\n"
+            f"👤 کاربر جدید: {new_name}\n"
+            f"🫆 شماره کاربری: <a href=\"{new_link}\">{new_user_id}</a>\n\n"
+            f"👤 معرف: {ref_name}\n"
+            f"🫆 شماره کاربری: <a href=\"{ref_link}\">{referrer_id}</a>"
+        )
 
-            # لینک معرف
-            if ref_username:
-                ref_link = f"https://t.me/{ref_username}"
-            else:
-                ref_link = f"tg://user?id={referrer_id}"
+        await context.bot.send_message(
+            Config.ADMIN_ID,
+            text,
+            parse_mode="HTML",
+        )
 
-            text = (
-                f"📢 <b>گزارش زیرمجموعه</b>\n\n"
-                f"👤 کاربر جدید: {new_name}\n"
-                f"🫆 شماره کاربری: <a href='{new_link}'>{new_user_id}</a>\n\n"
-                f"👤 معرف: {ref_name}\n"
-                f"🫆 شماره کاربری: <a href='{ref_link}'>{referrer_id}</a>"
-            )
-
-            await context.bot.send_message(
-                Config.ADMIN_ID,
-                text,
-                parse_mode="HTML",
-            )
-        except Exception as e:
-            print(f"referral report error: {e}")
+    except Exception as e:
+        print(f"referral report error: {e}")
 
 
 async def account(update: Update, context: ContextTypes.DEFAULT_TYPE):
