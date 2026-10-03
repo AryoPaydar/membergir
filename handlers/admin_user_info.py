@@ -682,7 +682,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # 🆕 هندل ref_profile (از گزارش زیرمجموعه)
     if data.startswith("ref_profile:"):
         await q.answer()
-        target_id = int(data.split(":")[1])
+        parts = data.split(":")
+        target_id = int(parts[1])
+        other_id = int(parts[2]) if len(parts) > 2 else None
+
         user = get_user(target_id)
         if not user:
             await q.answer("❌ کاربر یافت نشد.", show_alert=True)
@@ -690,19 +693,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         text = await _build_user_info_text(target_id)
 
+        buttons = []
+        if other_id:
+            buttons.append([("👤 کاربر دیگر", f"ref_profile:{other_id}:{target_id}")])
+            buttons.append([("🔙 بستن", "ref_profile_close")])
+        else:
+            buttons.append([("🔙 بستن", "ref_profile_close")])
+
         try:
             await q.message.edit_text(
                 text,
                 parse_mode="HTML",
-                reply_markup=inline([
-                    [("🔙 بازگشت", "ref_profile_back")],
-                ])
+                reply_markup=inline(buttons)
             )
         except Exception:
             pass
         return True
 
-    if data == "ref_profile_back":
+    if data == "ref_profile_close":
         await q.answer()
         try:
             await q.message.delete()
