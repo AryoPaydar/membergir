@@ -114,7 +114,6 @@ async def redeem_gift(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_menu(is_admin(user_id))
         )
 
-        # 👈 ارسال/ادیت پست موفقیت در کانال
         await _send_or_edit_success_post(
             context, code_id, code, amount, new_used, max_users, post_success_id
         )
@@ -408,7 +407,10 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             await update.message.reply_text("❌ فقط عدد مجاز است.")
             return True
         amount = int(text)
-        set_user_state(user_id, "gc_input_time", {**data, "amount": amount})
+        # حفظ همه فیلدهای قبلی
+        new_data = dict(data)
+        new_data["amount"] = amount
+        set_user_state(user_id, "gc_input_time", new_data)
         await update.message.reply_text(
             "زمان مد نظر برای مصرف هدیه اعتباری چقدر است ؟\n\n"
             "مثال: 60 یعنی 60 دقیقه فرصت مصرف",
@@ -424,11 +426,18 @@ async def handle_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         amount = data.get("amount", 0)
         mode = data.get("mode", "all")
 
-        set_user_state(user_id, "gc_confirm", {
+        # حفظ همه فیلدها برای مرحله confirm
+        confirm_data = {
             "mode": mode,
             "amount": amount,
             "minutes": minutes,
-        })
+        }
+        if "coin_limit" in data:
+            confirm_data["coin_limit"] = data["coin_limit"]
+        if "target_id" in data:
+            confirm_data["target_id"] = data["target_id"]
+
+        set_user_state(user_id, "gc_confirm", confirm_data)
 
         mode_text = {
             "all": "همه کاربران",
@@ -727,6 +736,16 @@ async def gc_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TY
     coin_limit = data.get("coin_limit")
     target_id = data.get("target_id")
 
+    # چک coin_limit
+    if mode == "coins" and not coin_limit:
+        await context.bot.send_message(
+            user_id,
+            "❌ محدوده سکه مشخص نشده. دوباره تلاش کن.",
+            reply_markup=admin_panel()
+        )
+        set_user_state(user_id, "none")
+        return
+
     expire_at = now_ts() + (minutes * 60)
 
     with db.conn() as c:
@@ -749,7 +768,7 @@ async def gc_confirm_send_users(update: Update, context: ContextTypes.DEFAULT_TY
             users = c.execute("""
                 SELECT user_id FROM users
                 WHERE banned = 0 AND coins <= ?
-            """, (coin_limit or 0,)).fetchall()
+            """, (coin_limit,)).fetchall()
         elif mode == "specific":
             users = [{"user_id": target_id}] if target_id else []
         else:
