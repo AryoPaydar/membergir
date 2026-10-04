@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, LinkPreviewOptions
 from telegram.ext import ContextTypes
 from database import db
 from config import Config
@@ -14,6 +14,10 @@ from utils.helpers import is_positive_int, now_ts, jalali_now
 from datetime import datetime
 import jdatetime
 import math
+
+
+# 🔕 غیرفعال کردن پیش‌نمایش لینک به صورت سراسری
+NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
 
 # ==================== منوی مدیریت کاربران ====================
@@ -175,9 +179,19 @@ async def au_show(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
 
     try:
-        await q.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+        await q.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+            link_preview_options=NO_PREVIEW
+        )
     except Exception:
-        await q.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        await q.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+            link_preview_options=NO_PREVIEW
+        )
 
 
 async def _build_user_info_text(user_id):
@@ -322,7 +336,8 @@ async def au_subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.message.reply_text(
         text,
         parse_mode="HTML",
-        reply_markup=inline([[("🔙 بازگشت", f"au_show:{target_id}")]])
+        reply_markup=inline([[("🔙 بازگشت", f"au_show:{target_id}")]]),
+        link_preview_options=NO_PREVIEW
     )
 
 
@@ -680,7 +695,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return await handle_srch_callback(update, context)
 
     # 🆕 هندل ref_profile (از گزارش زیرمجموعه)
-    # 🆕 هندل ref_profile
     if data.startswith("ref_profile:"):
         await q.answer()
         parts = data.split(":")
@@ -701,7 +715,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 parse_mode="HTML",
                 reply_markup=inline([
                     [("🔙 بازگشت", f"ref_report:{new_user_id}:{referrer_id}")],
-                ])
+                ]),
+                link_preview_options=NO_PREVIEW
             )
         except Exception:
             pass
@@ -749,7 +764,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await q.message.edit_text(
                 text,
                 parse_mode="HTML",
-                reply_markup=keyboard
+                reply_markup=keyboard,
+                link_preview_options=NO_PREVIEW
             )
         except Exception:
             pass
