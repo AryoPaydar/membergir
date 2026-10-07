@@ -446,3 +446,99 @@ async def check_referral_milestone(context, user_id: int):
         )
     except Exception:
         pass
+
+
+# ==================== جریمه لفت زودتر از موعد ====================
+
+LEAVE_PENALTY_BY_PANEL = {
+    "عادی":    2,
+    "حرفه ای": 2.5,
+    "ویژه":    3,
+}
+LEAVE_MIN_DAYS = 3
+
+
+def get_leave_penalty(user: dict) -> float:
+    """مبلغ جریمه بر اساس پنل کاربر"""
+    panel = user.get("panel", "عادی") if user else "عادی"
+    return LEAVE_PENALTY_BY_PANEL.get(panel, 2)
+
+
+def penalize_leaver(user_id: int, order_member_id: int, penalty: float) -> bool:
+    """
+    کسر جریمه از coins (با اجازه منفی) + علامت‌گذاری رکورد
+    خروجی: True اگه موفق
+    """
+    from utils.helpers import now_ts
+    now = now_ts()
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT penalized, left_at FROM order_members WHERE id = ?",
+            (order_member_id,)
+        ).fetchone()
+        if not row:
+            return False
+        if row["penalized"]:
+            return False
+        if row["left_at"] is not None:
+            return False
+
+        # کسر جریمه — coins می‌تونه منفی بشه
+        c.execute("""
+            UPDATE users SET coins = coins - ? WHERE user_id = ?
+        """, (penalty, user_id))
+
+        c.execute("""
+            UPDATE order_members
+            SET left_at = ?, penalized = 1, penalized_at = ?, penalty_amount = ?
+            WHERE id = ?
+        """, (now, now, penalty, order_member_id))
+
+        c.execute("""
+            INSERT INTO transactions (from_id, amount, type, description)
+            VALUES (?, ?, 'leave_penalty', ?)
+        """, (user_id, int(penalty) if penalty == int(penalty) else penalty,
+              f"جریمه لفت زودتر از 3 روز - سفارش #{order_member_id}"))
+
+    return True
+
+
+def find_pending_leaves(user_id: int):
+    """
+    پیدا کردن رکوردهای order_members که:
+    - این کاربر عضو شده (user_id)
+    - هنوز لفت نداده (left_at IS NULL)
+    - جریمه نشده (penalized = 0)
+    - کمتر از 3 روز از joined_at گذشته
+    خروجی: لیست dict
+    """
+    from utils.helpers import now_ts
+    now = now_ts()
+    cutoff = now - (LEAVE_MIN_DAYS * 86400)
+    with db.conn() as c:
+        rows = c.execute("""
+            SELECT om.id, om.order_id, om.user_id, om.joined_at,
+                   o.admin_id, o.channel, o.post_id, o.channel_id
+            FROM order_members om
+            JOIN orders o ON o.id = om.order_id
+            WHERE om.user_id = ?
+              AND om.left_at IS NULL
+              AND om.penalized = 0
+              AND CAST(strftime('%s', om.joined_at) AS INTEGER) > ?
+        """, (user_id, cutoff)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def refund_to_order_owner(order_admin_id: int, order_id: int, amount: float):
+    """برگرداندن سکه به سفارش‌دهنده بابت لفت عضو"""
+    with db.conn() as c:
+        c.execute("""
+            UPDATE users
+            SET coins = coins + ?, total_earned = total_earned + ?
+            WHERE user_id = ?
+        """, (amount, amount, order_admin_id))
+        c.execute("""
+            INSERT INTO transactions (to_id, amount, type, description)
+            VALUES (?, ?, 'leave_refund', ?)
+        """, (order_admin_id, int(amount) if amount == int(amount) else amount,
+              f"بازگشت سکه بابت لفت عضو از سفارش #{order_id}"))
