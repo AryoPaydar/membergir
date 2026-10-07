@@ -118,6 +118,24 @@ class Database:
                 )
             """)
 
+            # === اضافه کردن ستون‌های جدید به order_members (برای جریمه لفت) ===
+            om_cols = [r[1] for r in c.execute("PRAGMA table_info(order_members)").fetchall()]
+            if "penalized" not in om_cols:
+                try:
+                    c.execute("ALTER TABLE order_members ADD COLUMN penalized INTEGER DEFAULT 0")
+                except Exception:
+                    pass
+            if "penalized_at" not in om_cols:
+                try:
+                    c.execute("ALTER TABLE order_members ADD COLUMN penalized_at TIMESTAMP")
+                except Exception:
+                    pass
+            if "penalty_amount" not in om_cols:
+                try:
+                    c.execute("ALTER TABLE order_members ADD COLUMN penalty_amount REAL DEFAULT 0")
+                except Exception:
+                    pass
+
             # === گزارشات سفارش ===
             c.execute("""
                 CREATE TABLE IF NOT EXISTS order_reports (
@@ -357,6 +375,8 @@ class Database:
             c.execute("CREATE INDEX IF NOT EXISTS idx_ads_position ON ads_channels(position)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_ads_last_shown ON ads_channels(last_shown_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_credit_user ON credit_gifts(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_om_user ON order_members(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_om_order ON order_members(order_id)")
 
             # === ادمین اصلی ===
             c.execute(
