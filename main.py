@@ -9,7 +9,8 @@ from config import Config
 from database import db
 from bot_manager import (
     get_user, create_user, is_admin, is_banned, is_bot_on, get_setting,
-    set_user_state
+    set_user_state, get_leave_penalty, penalize_leaver,
+    find_pending_leaves, refund_to_order_owner
 )
 from handlers import (
     user, admin, ads, transfer, referral, gift, shop,
@@ -128,6 +129,97 @@ async def track_chat(update: Update, context):
         with db.conn() as c:
             c.execute("DELETE FROM bot_chats WHERE chat_id = ?", (chat.id,))
         logger.info(f"❌ ربات از {chat.type} {chat.title} (ID: {chat.id}) حذف شد")
+
+
+async def on_chat_member(update: Update, context):
+    """
+    وقتی عضوی از کانال/گروه لفت می‌ده یا kick میشه:
+    - چک کن توی order_members رکورد فعال داشته
+    - اگه کمتر از 3 روز از claim گذشته باشه → جریمه کن
+    - به سفارش‌دهنده 2 سکه برگردون
+    """
+    cm = update.chat_member
+    if not cm:
+        return
+
+    new_status = cm.new_chat_member.status
+    old_status = cm.old_chat_member.status
+    chat = cm.chat
+    member = cm.new_chat_member.user
+
+    # فقط وقتی از حالت member/administrator/creator خارج شده
+    if new_status not in ("left", "kicked"):
+        return
+    if old_status not in ("member", "administrator", "creator"):
+        return
+
+    user_id = member.id
+
+    # خود ربات رو نادیده بگیر
+    try:
+        me = await context.bot.get_me()
+        if user_id == me.id:
+            return
+    except Exception:
+        pass
+
+    logger.info(f"👋 User {user_id} left/kicked from {chat.id} ({chat.title})")
+
+    pending = find_pending_leaves(user_id)
+    if not pending:
+        return
+
+    for rec in pending:
+        order_channel = rec.get("channel", "").lstrip("@")
+        chat_username = (chat.username or "").lstrip("@")
+        order_channel_id = rec.get("channel_id")
+
+        matched = False
+        # 1) با chat_id سفارش
+        if order_channel_id and int(order_channel_id) == int(chat.id):
+            matched = True
+        # 2) با یوزرنیم
+        elif chat_username and order_channel and chat_username.lower() == order_channel.lower():
+            matched = True
+
+        if not matched:
+            continue
+
+        user = get_user(user_id)
+        if not user:
+            continue
+
+        penalty = get_leave_penalty(user)
+
+        ok = penalize_leaver(user_id, rec["id"], penalty)
+        if not ok:
+            continue
+
+        logger.info(
+            f"💸 Penalized user {user_id} amount={penalty} "
+            f"for order #{rec['order_id']}"
+        )
+
+        # پیام به لفت‌دهنده
+        try:
+            await context.bot.send_message(
+                user_id,
+                f"⚠️ شما کمتر از 3 روز از کانال @{order_channel} لفت دادید.\n"
+                f"💸 {penalty:g} سکه از حساب شما کسر شد."
+            )
+        except Exception:
+            pass
+
+        # برگرداندن 2 سکه به سفارش‌دهنده + پیام
+        try:
+            refund_to_order_owner(rec["admin_id"], rec["order_id"], 2)
+            await context.bot.send_message(
+                rec["admin_id"],
+                f"🛡 یک کاربر کمتر از 3 روز از سفارش شما لفت داده است "
+                f"به همین خاطر 2 سکه به شما بازگشت داده شد."
+            )
+        except Exception as e:
+            logger.error(f"refund to owner error: {e}")
 
 
 async def on_message(update: Update, context):
@@ -393,6 +485,7 @@ def main():
     ))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(ChatMemberHandler(track_chat, ChatMemberHandler.MY_CHAT_MEMBER))
+    app.add_handler(ChatMemberHandler(on_chat_member, ChatMemberHandler.CHAT_MEMBER))
     app.add_handler(ChatJoinRequestHandler(on_join_request))
     app.add_error_handler(on_error)
 
